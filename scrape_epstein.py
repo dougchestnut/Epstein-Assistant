@@ -2,8 +2,10 @@ import os
 import time
 import json
 import re
+import argparse
 from urllib.parse import urljoin, unquote, urlparse
 from playwright.sync_api import sync_playwright
+
 try:
     from playwright_stealth import stealth_sync
 except ImportError:
@@ -255,6 +257,10 @@ def download_file(context, url, meta):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Scrape Epstein files from justice.gov")
+    parser.add_argument("--no-crawl", action="store_true", help="Skip crawling and only retry failed/pending downloads")
+    args = parser.parse_args()
+
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
     
@@ -271,15 +277,20 @@ def main():
         )
         
         # Step 1: Crawl
-        print("Starting crawl...")
-        page = context.new_page()
-        if stealth_sync:
-            stealth_sync(page)
-            
-        for seed in SEEDS:
-             scrape_page(page, seed)
-             
-        page.close()
+        if not args.no_crawl:
+            print("Starting crawl...")
+            page = context.new_page()
+            if stealth_sync:
+                stealth_sync(page)
+                
+            for seed in SEEDS:
+                 scrape_page(page, seed)
+                 
+            page.close()
+            print(f"Crawl complete. Found {len(inventory)} items.")
+        else:
+            print("Skipping crawl (--no-crawl set). Using existing inventory.")
+
         
         print(f"Crawl complete. Found {len(inventory)} files.")
         

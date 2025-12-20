@@ -17,7 +17,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
 
 1.  **Install Dependencies**
     ```bash
-    pip install playwright playwright-stealth
+    pip install playwright playwright-stealth pymupdf
     playwright install chromium
     ```
 
@@ -31,6 +31,13 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     *   Crawl the Justice.gov pages.
     *   Populate `inventory.json`.
     *   Download all new files.
+
+3.  **Classify Files** (Optional but Recommended)
+    ```bash
+    python classify_files.py
+    ```
+    This script analyzes downloaded PDFs to determine if they are **Text** (searchable) or **Scanned** (images). It updates `inventory.json` with this classification, enabling targeted OCR processing.
+
 
 ### Output
 *   **`epstein_files/`**: Directory containing all downloaded documents.

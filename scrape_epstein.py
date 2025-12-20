@@ -187,32 +187,72 @@ def download_file(context, url, meta):
         return
 
     except Exception as e:
-        # Fallback to API
+        # Fallback to in-page fetch (solves 401 errors by using browser context)
         try:
-             if page: page.close()
-             # New page for API request to avoid any download hang
-             page = context.new_page()
-             if stealth_sync: stealth_sync(page)
+             # We might need to navigate to the URL first or just fetch from about:blank if CORS allows
+             # Best bet: navigate to the file URL. If it opens in browser (e.g. video player), we can fetch it.
+             # If it triggers download, our expect_download would have caught it.
+             # So we assume it opened in the browser.
+             
+             if page.is_closed():
+                 page = context.new_page()
+                 if stealth_sync: stealth_sync(page)
+
+             # Navigate and wait for load. 
+             # If it's a media file, it might load a player.
+             try:
+                page.goto(url, timeout=30000, wait_until="mask")
+             except:
+                pass
+             
+             # Fetch data as base64 using browser context
+             print(f"Attempting in-page fetch for {url}")
+             data_b64 = page.evaluate(r"""async (url) => {
+                const response = await fetch(url);
+                if (response.status !== 200) {
+                    throw new Error("Status " + response.status);
+                }
+                const blob = await response.blob();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+             }""", url)
+             
+             # data_b64 is like "data:video/mp4;base64,AAAA..."
+             header, encoded = data_b64.split(",", 1)
+             import base64
+             file_data = base64.b64decode(encoded)
              
              filename = os.path.basename(unquote(urlparse(url).path))
              filename = re.sub(r'[^\w\-_\.]', '_', filename)
              filepath = os.path.join(OUTPUT_DIR, filename)
-             
-             response = page.request.get(url)
-             if response.status == 200:
-                with open(filepath, 'wb') as f:
-                    f.write(response.body())
-                meta["local_path"] = filepath
-                meta["status"] = "downloaded"
-                print(f"Downloaded (API): {filepath}")
-             else:
-                meta["status"] = "failed"
-                meta["error"] = f"Status {response.status}"
+
+             # Check collision
+             base, ext = os.path.splitext(filename)
+             counter = 1
+             while os.path.exists(filepath):
+                 new_filename = f"{base}_{counter}{ext}"
+                 filepath = os.path.join(OUTPUT_DIR, new_filename)
+                 counter += 1
+                 
+             with open(filepath, 'wb') as f:
+                 f.write(file_data)
+                 
+             meta["local_path"] = filepath
+             meta["status"] = "downloaded"
+             print(f"Downloaded (In-Page Fetch): {filepath}")
              page.close()
+             
         except Exception as e2:
              print(f"Download failed {url}: {e2}")
              meta["status"] = "failed"
              meta["error"] = str(e2)
+             if not page.is_closed():
+                 page.close()
+
 
 def main():
     if not os.path.exists(OUTPUT_DIR):
@@ -248,6 +288,9 @@ def main():
         for url, meta in inventory.items():
             if meta.get("status") == "downloaded":
                 continue
+            
+            if meta.get("status") == "failed":
+                print(f"Retrying previously failed item: {url}")
             
             download_file(context, url, meta)
             save_inventory()

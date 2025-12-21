@@ -38,6 +38,23 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     ```
     This script analyzes downloaded PDFs to determine if they are **Text** (searchable) or **Scanned** (images). It updates `inventory.json` with this classification, enabling targeted OCR processing.
 
+4.  **Extract Content**
+    ```bash
+    python extract_content.py
+    ```
+    Extracts embedded images and text from the PDFs into dedicated subdirectories (e.g., `epstein_files/001/images/`).
+
+5.  **Image Analysis**
+    ```bash
+    python analyze_images.py [--overwrite]
+    ```
+    Uses a local LLM to analyze extracted images and generate structured JSON descriptions (`type`, `objects`, `ocr_needed`, etc.).
+    
+    **Requirements:**
+    *   **LM Studio** running on `http://localhost:1234`.
+    *   Vision-capable model loaded (e.g., `mistralai/ministral-3-3b` or `llava`).
+
+
 
 ### Output
 *   **`epstein_files/`**: Directory containing all downloaded documents.

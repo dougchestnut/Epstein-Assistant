@@ -88,18 +88,52 @@ def main():
     inventory = load_inventory()
     print(f"Loaded {len(inventory)} items.")
     
+    import zipfile
+    
     updates = 0
     for url, meta in inventory.items():
-        if meta.get("extraction_status") == "done":
-            continue
-            
         local_path = meta.get("local_path", "")
-        if not local_path.lower().endswith(".pdf"):
+        if not local_path: 
             continue
             
-        if meta.get("status") == "downloaded":
-             extract_content(url, meta)
-             update_item(url, meta)
+        is_pdf = local_path.lower().endswith(".pdf")
+        is_zip = local_path.lower().endswith(".zip")
+        
+        if not (is_pdf or is_zip):
+            continue
+
+        # Check if processing is needed
+        should_process = False
+        if meta.get("extraction_status") != "done":
+             should_process = True
+        else:
+             # Check for content.txt (for PDFs) or extraction dir (for ZIPs)
+             extraction_dir = meta.get("extraction_dir")
+             if extraction_dir and not os.path.exists(extraction_dir):
+                 should_process = True
+             elif is_pdf and extraction_dir and os.path.exists(extraction_dir):
+                 text_path = os.path.join(extraction_dir, "content.txt")
+                 if not os.path.exists(text_path):
+                     should_process = True
+        
+        if should_process and meta.get("status") == "downloaded":
+             if is_pdf:
+                extract_content(url, meta)
+             elif is_zip:
+                # Extract ZIP
+                target_dir = os.path.splitext(local_path)[0]
+                try:
+                    with zipfile.ZipFile(local_path, 'r') as zip_ref:
+                        # Safety: check for malicious paths? For this purpose, basic extractall is likely fine.
+                        zip_ref.extractall(target_dir)
+                    print(f"Unzipped {local_path} to {target_dir}")
+                    
+                    meta["extraction_status"] = "done"
+                    meta["extraction_dir"] = target_dir
+                    update_item(url, meta)
+                except Exception as e:
+                    print(f"Failed to unzip {local_path}: {e}")
+                    
              updates += 1
              
     print("Extraction complete.")

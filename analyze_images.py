@@ -133,18 +133,76 @@ def process_directory(url, meta, overwrite=False):
 
             if clean_json:
                 try:
-                    # Validate JSON (and attempt to fix common issues like newlines in strings)
-                    # Use a custom decoder/method if strict json.loads fails? 
-                    # For now, just strict load. the model output looks valid.
-                    json_obj = json.loads(clean_json)
+                    # Remove comments (// ...)
+                    clean_json = re.sub(r'//.*$', '', clean_json, flags=re.MULTILINE)
+                    
+                    # Fix unescaped newlines within strings.
+                    # This is tricky without a full parser, but we can try to escape control chars.
+                    # Specialized fix for "description" field having unescaped quotes or Python-style triple quotes
+                    # Pattern: "description":\s*("{1,3})((?:.|\n)*?)("{1,3}\s*\}(\s*)?)$
+                    def fix_description_quotes(full_json_str):
+                        # Matches "description": "..." or "description": """..."""
+                        # We capture the opening quote(s), the content, and the closing quote(s) + closing brace
+                        pattern = r'("description"\s*:\s*("{1,3}))((?:.|\n)*?)("{1,3}\s*\}(\s*)?)$'
+                        match = re.search(pattern, full_json_str, re.DOTALL)
+                        if match:
+                            prefix_full = match.group(1) # "description": """
+                            opener = match.group(2)      # """
+                            content = match.group(3)     # content inside
+                            suffix_full = match.group(4) # """ }
+                            closer = match.group(5)      # """ (part of suffix_full) but we need to match it roughly
+
+                            # We want to replace the opener/closer with a simple single quote "
+                            # And we want to escape the content.
+                            
+                            # Reconstruct prefix with just one quote
+                            new_prefix = '"description": "'
+                            
+                            # Clean content:
+                            # 1. Escape backslashes first?
+                            # content = content.replace('\\', '\\\\') # Dangerous if already escaped?
+                            # 2. Escape double quotes "
+                            fixed_content = content.replace('"', '\\"')
+                            # 3. Escape newlines
+                            fixed_content = fixed_content.replace('\n', '\\n').replace('\r', '')
+                            
+                            return full_json_str[:match.start()] + new_prefix + fixed_content + '"\n}'
+                        return full_json_str
+
+                    clean_json_fixed = fix_description_quotes(clean_json)
+                    
+                    # Original newline fix logic for other fields (if any), modified to be safer
+                    def escape_newlines(match):
+                         return match.group(0).replace('\n', '\\n').replace('\r', '')
+                    
+                    # Apply general newline fix to the whole thing (careful not to double escape description if validation passes)
+                    # Actually, if we fixed description, we might have fixed the main culprit.
+                    # Let's try parsing.
+                    
+                    try:
+                        json_obj = json.loads(clean_json_fixed)
+                    except:
+                        # If that failed, try the general newline fix on the *original* string (or the fixed one?)
+                        # The regex fix_description_quotes returns the full string with modification.
+                        # Run the general newline escaper on top of it?
+                         clean_json_fixed_2 = re.sub(r'"((?:[^"\\]|\\.)*)"', escape_newlines, clean_json_fixed, flags=re.DOTALL)
+                         json_obj = json.loads(clean_json_fixed_2)
                     with open(json_path, "w") as f:
                         json.dump(json_obj, f, indent=2)
                     print(f"Saved analysis to {json_path}")
                     analyzed_count += 1
-                except json.JSONDecodeError as e:
-                    print(f"Warning: JSON parse error for {img_name}: {e}. Saving raw response to .txt")
-                    with open(img_path + ".txt", "w") as f:
-                        f.write(description)
+                except (json.JSONDecodeError, Exception) as e:
+                    # Fallback attempt without sanitization or save as txt
+                    try:
+                         json_obj = json.loads(clean_json, strict=False)
+                         with open(json_path, "w") as f:
+                            json.dump(json_obj, f, indent=2)
+                         print(f"Saved analysis to {json_path} (strict=False)")
+                         analyzed_count += 1
+                    except Exception as e2:
+                        print(f"Final warning: Could not parse JSON for {img_name}: {e2}. Saving raw response to .txt")
+                        with open(img_path + ".txt", "w") as f:
+                            f.write(description)
             else:
                  print(f"Warning: No JSON found in response for {img_name}. Saving raw response to .txt")
                  with open(img_path + ".txt", "w") as f:

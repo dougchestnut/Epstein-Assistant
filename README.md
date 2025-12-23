@@ -56,6 +56,19 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
 
 
 
-### Output
-*   **`epstein_files/`**: Directory containing all downloaded documents.
-*   **`inventory.json`**: Metadata for every file found, including source URL and download status.
+### Output Structure
+The `epstein_files/` directory is organized by document ID. After running all steps, a typical directory looks like:
+
+```text
+epstein_files/
+├── 001/
+│   ├── 001.pdf             # Original file
+│   ├── content.txt         # Extracted text content
+│   └── images/
+│       ├── page1_img1.jpg  # Extracted image
+│       └── page1_img1.json # AI Analysis (Type, Description, Objects)
+├── 002/
+...
+```
+
+*   **`inventory.json`**: The source of truth database tracking every file's URL, download status, classification, and analysis progress.

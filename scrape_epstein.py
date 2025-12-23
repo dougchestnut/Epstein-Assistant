@@ -3,6 +3,8 @@ import time
 import json
 import re
 import argparse
+import requests
+import subprocess
 from urllib.parse import urljoin, unquote, urlparse
 from playwright.sync_api import sync_playwright
 
@@ -189,90 +191,201 @@ def download_file(context, url, meta):
         return
 
     except Exception as e:
-        # Fallback to in-page fetch (solves 401 errors by using browser context)
+        # Fallback using requests library for robust streaming of large files
         try:
-             # We might need to navigate to the URL first or just fetch from about:blank if CORS allows
-             # Best bet: navigate to the file URL. If it opens in browser (e.g. video player), we can fetch it.
-             # If it triggers download, our expect_download would have caught it.
-             # So we assume it opened in the browser.
+             print(f"Attempting requests-based stream for {url}")
              
-             if page.is_closed():
-                 page = context.new_page()
-                 if stealth_sync: stealth_sync(page)
-
-             # Navigate and wait for load. 
-             # If it's a media file, it might load a player.
-             try:
-                page.goto(url, timeout=30000, wait_until="mask")
-             except:
-                pass
+             # Extract cookies from playwright context
+             cookies = context.cookies()
+             session = requests.Session()
+             for cookie in cookies:
+                 session.cookies.set(cookie['name'], cookie['value'], domain=cookie['domain'])
              
-             # Fetch data as base64 using browser context
-             print(f"Attempting in-page fetch for {url}")
-             data_b64 = page.evaluate(r"""async (url) => {
-                const response = await fetch(url);
-                if (response.status !== 200) {
-                    throw new Error("Status " + response.status);
-                }
-                const blob = await response.blob();
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
-             }""", url)
-             
-             # data_b64 is like "data:video/mp4;base64,AAAA..."
-             header, encoded = data_b64.split(",", 1)
-             import base64
-             file_data = base64.b64decode(encoded)
-             
-             filename = os.path.basename(unquote(urlparse(url).path))
-             filename = re.sub(r'[^\w\-_\.]', '_', filename)
-             filepath = os.path.join(OUTPUT_DIR, filename)
-
-             # Check collision
-             base, ext = os.path.splitext(filename)
-             counter = 1
-             while os.path.exists(filepath):
-                 new_filename = f"{base}_{counter}{ext}"
-                 filepath = os.path.join(OUTPUT_DIR, new_filename)
-                 counter += 1
+             headers = {
+                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+             }
+             if "source_page" in meta:
+                 headers["Referer"] = meta["source_page"]
                  
-             with open(filepath, 'wb') as f:
-                 f.write(file_data)
+             # Stream download
+             # 30 minute timeout for connect; read timeout handled by streaming?
+             with session.get(url, headers=headers, stream=True, timeout=60) as r:
+                 r.raise_for_status()
                  
-             meta["local_path"] = filepath
-             meta["status"] = "downloaded"
-             print(f"Downloaded (In-Page Fetch): {filepath}")
-             page.close()
-             
+                 filename = os.path.basename(unquote(urlparse(url).path))
+                 if not filename or len(filename) < 3:
+                     filename = f"file_{int(time.time())}.dat"
+
+                 filename = re.sub(r'[^\w\-_\.]', '_', filename)
+                 filepath = os.path.join(OUTPUT_DIR, filename)
+
+                 # Collision check
+                 base, ext = os.path.splitext(filename)
+                 counter = 1
+                 while os.path.exists(filepath):
+                     new_filename = f"{base}_{counter}{ext}"
+                     filepath = os.path.join(OUTPUT_DIR, new_filename)
+                     counter += 1
+                 
+                 print(f"Streaming to {filepath}...")
+                 total_size = int(r.headers.get('content-length', 0))
+                 downloaded = 0
+                 
+                 with open(filepath, 'wb') as f:
+                     for chunk in r.iter_content(chunk_size=8192): 
+                         if chunk:
+                             f.write(chunk)
+                             downloaded += len(chunk)
+                             # Optional: Progress logging for huge files?
+                             if total_size > 100 * 1024 * 1024 and downloaded % (50 * 1024 * 1024) < 8192:
+                                  print(f"  ...{(downloaded/1024/1024):.1f} MB encoded")
+                                  
+                 meta["file_size"] = total_size
+                 print(f"Downloaded (Requests Stream): {filepath}")
+                 
+                 # Attempt Compression
+                 try:
+                     compressed_path = compress_media(filepath)
+                     if compressed_path != filepath:
+                         meta["local_path"] = compressed_path
+                         meta["file_size"] = os.path.getsize(compressed_path)
+                         print(f"Compressed/Processed to: {compressed_path}")
+                         # Tag as compressed
+                         if "tags" not in meta: meta["tags"] = []
+                         if "compressed" not in meta["tags"]: meta["tags"].append("compressed")
+                 except Exception as comp_e:
+                     print(f"Compression failed: {comp_e}")
+                 
+                 if not page.is_closed():
+                     page.close()
+                 return
+
         except Exception as e2:
-             print(f"Download failed {url}: {e2}")
+             print(f"Download (requests) failed {url}: {e2}")
              meta["status"] = "failed"
              meta["error"] = str(e2)
              if not page.is_closed():
                  page.close()
+             return
 
+def compress_media(filepath):
+    """
+    Compresses media files (WAV -> MP3, Video -> smaller MP4) using ffmpeg.
+    Returns the new filepath if successful, or the original filepath if not.
+    """
+    lower_path = filepath.lower()
+    ffmpeg_path = "/opt/homebrew/bin/ffmpeg"
+    if not os.path.exists(ffmpeg_path):
+        print(f"ffmpeg not found at {ffmpeg_path}, skipping compression.")
+        return filepath
+    
+    # Audio Compression (WAV -> MP3)
+    if lower_path.endswith(".wav"):
+        mp3_path = os.path.splitext(filepath)[0] + ".mp3"
+        cmd = [
+            ffmpeg_path, "-y", "-i", filepath,
+            "-codec:a", "libmp3lame", "-qscale:a", "4",
+            mp3_path
+        ]
+        cleanup_original = True
+        
+    # Video Compression (Re-encode to save space, harmless for already small files?)
+    # Only process if not already processed/optimal? 
+    # We can check extension or assume if we are called here we want to compress.
+    elif lower_path.endswith(('.mov', '.avi', '.m4v')) or (lower_path.endswith('.mp4') and "compressed" not in filepath):
+        # We will output as .mp4 with H.264
+        # If it's already mp4, we rename output to avoid overwrite collision until success
+        base, ext = os.path.splitext(filepath)
+        output_path = base + "_compressed.mp4"
+        
+        # CRF 28 is high compression, acceptable quality for archival. Preset fast.
+        # -an removes audio? NO, we want audio. 
+        # -c:a aac -b:a 128k
+        cmd = [
+            ffmpeg_path, "-y", "-i", filepath,
+            "-vcodec", "libx264", "-crf", "28", "-preset", "fast",
+            "-acodec", "aac", "-b:a", "128k",
+            output_path
+        ]
+        cleanup_original = True
+        # If input was mp4, we might replace it.
+        
+    else:
+        return filepath
+    
+    print(f"Compressing {filepath}...")
+    try:
+        # Run ffmpeg
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        
+        # Verify output
+        target_out = cmd[-1]
+        if os.path.exists(target_out) and os.path.getsize(target_out) > 0:
+            if cleanup_original:
+                os.remove(filepath)
+                
+            # If we created _compressed.mp4 from .mp4, rename it back to original name?
+            # Or keep it to indicate compression. The user wants to save space.
+            # If we remove original, we can rename result to original name (if extension matches).
+            if lower_path.endswith('.mp4') and target_out.endswith('_compressed.mp4'):
+                 os.rename(target_out, filepath)
+                 return filepath
+            
+            return target_out
+            
+    except subprocess.CalledProcessError as e:
+        print(f"ffmpeg failed: {e.stderr.decode()}")
+    except Exception as e:
+        print(f"Error running ffmpeg: {e}")
+        
+    return filepath
 
 def main():
     parser = argparse.ArgumentParser(description="Scrape Epstein files from justice.gov")
     parser.add_argument("--no-crawl", action="store_true", help="Skip crawling and only retry failed/pending downloads")
+    parser.add_argument("--headless", action="store_true", help="Run browser in headless mode (default: visible)")
+    parser.add_argument("--compress-existing", action="store_true", help="Compress all existing downloaded media files in inventory")
     args = parser.parse_args()
 
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
     
     load_inventory()
+    
+    # Retroactive compression mode
+    if args.compress_existing:
+        print("Starting retroactive compression of existing files...")
+        count = 0
+        for url, meta in inventory.items():
+            local_path = meta.get("local_path")
+            if local_path and os.path.exists(local_path):
+                # Skip if already looks compressed (mp3) unless it's a video we want to re-encode (but let's avoid loop)
+                # Simple check: if it's wav or raw video
+                if local_path.lower().endswith(('.wav', '.mov', '.avi')) or (local_path.lower().endswith('.mp4') and "compressed" not in meta.get("tags", [])):
+                    print(f"Checking {local_path}...")
+                    new_path = compress_media(local_path)
+                    if new_path != local_path:
+                        meta["local_path"] = new_path
+                        meta["file_size"] = os.path.getsize(new_path)
+                        # Mark as compressed to avoid re-doing MP4s
+                        if "tags" not in meta: meta["tags"] = []
+                        if "compressed" not in meta["tags"]: meta["tags"].append("compressed")
+                        count += 1
+                        
+                        # Save periodically
+                        if count % 5 == 0: save_inventory()
+        
+        save_inventory()
+        print(f"Retroactive compression complete. Processed {count} files.")
+        return
 
         
     with sync_playwright() as p:
         # Launch browser
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=args.headless)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080},
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720},
             accept_downloads=True
         )
         
@@ -290,6 +403,26 @@ def main():
             print(f"Crawl complete. Found {len(inventory)} items.")
         else:
             print("Skipping crawl (--no-crawl set). Using existing inventory.")
+            # Warm up context to avoid 401s on protected files
+            print("Warming up browser context...")
+            page = context.new_page()
+            if stealth_sync: stealth_sync(page)
+            try:
+                page.goto(BASE_URL, wait_until='domcontentloaded', timeout=45000)
+                time.sleep(3) # Let Akamai/cookies settle
+                # Check robot
+                if "I am not a robot" in page.content() or "Access Denied" in page.title():
+                    print("!!! Detected Robot Check or Access Issue. !!!")
+                    if not args.headless:
+                        print("Please interact with the browser window to solve the CAPTCHA.")
+                        input("Press Enter here once you have solved it and the page loads...")
+                    else:
+                        print("Running in headless mode - cannot solve CAPTCHA interactively.")
+                        print("Attempting to proceed anyway, but downloads may fail (401/403).")
+                        time.sleep(5)
+            except Exception as e:
+                print(f"Warmup failed: {e}")
+            page.close()
 
         
         print(f"Crawl complete. Found {len(inventory)} files.")
@@ -297,10 +430,20 @@ def main():
         # Step 2: Download
         print("Starting downloads...")
         for url, meta in inventory.items():
+            # Check if already marked downloaded
             if meta.get("status") == "downloaded":
+                continue
+
+            # Check if file actually exists on disk even if status says otherwise
+            local_path = meta.get("local_path")
+            if local_path and os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+                print(f"File exists locally, updating status: {local_path}")
+                meta["status"] = "downloaded"
                 continue
             
             if meta.get("status") == "failed":
+                # Clear error to retry
+                meta["status"] = "pending"
                 print(f"Retrying previously failed item: {url}")
             
             download_file(context, url, meta)

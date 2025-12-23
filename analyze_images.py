@@ -106,8 +106,41 @@ def process_directory(url, meta, overwrite=False):
     analyzed_count = 0
     for img_name in images:
         img_path = os.path.join(images_dir, img_name)
-        json_path = img_path + ".json"
         
+        # Determine target directory and file paths
+        # e.g. images/foo.jpg -> images/foo/analysis.json
+        target_dir = os.path.splitext(img_path)[0]
+        os.makedirs(target_dir, exist_ok=True)
+        
+        json_path = os.path.join(target_dir, "analysis.json")
+        txt_path = os.path.join(target_dir, "analysis.txt")
+        
+        # Migration Logic: Check for old files and move them if new ones don't exist
+        old_json_path = img_path + ".json"
+        old_txt_path = img_path + ".txt"
+        
+        if os.path.exists(old_json_path):
+            if not os.path.exists(json_path):
+                try:
+                    os.rename(old_json_path, json_path)
+                    print(f"Migrated {old_json_path} -> {json_path}")
+                except OSError as e:
+                    print(f"Error migrating {old_json_path}: {e}")
+            else:
+                # New file already exists, just remove the old one or leave it? 
+                # Safer to leave it or maybe rename it to .bak? 
+                # For now let's just log it.
+                print(f"Notice: Both {old_json_path} and {json_path} exist. Keeping new, ignoring old.")
+
+        if os.path.exists(old_txt_path):
+            if not os.path.exists(txt_path):
+                 try:
+                    os.rename(old_txt_path, txt_path)
+                    print(f"Migrated {old_txt_path} -> {txt_path}")
+                 except OSError as e:
+                    print(f"Error migrating {old_txt_path}: {e}")
+
+        # Check if analysis already exists (in new location)
         if os.path.exists(json_path) and not overwrite:
             continue # Already analyzed
 
@@ -201,11 +234,11 @@ def process_directory(url, meta, overwrite=False):
                          analyzed_count += 1
                     except Exception as e2:
                         print(f"Final warning: Could not parse JSON for {img_name}: {e2}. Saving raw response to .txt")
-                        with open(img_path + ".txt", "w") as f:
+                        with open(txt_path, "w") as f:
                             f.write(description)
             else:
                  print(f"Warning: No JSON found in response for {img_name}. Saving raw response to .txt")
-                 with open(img_path + ".txt", "w") as f:
+                 with open(txt_path, "w") as f:
                     f.write(description)
         
         # Optional sleep to be nice to local GPU if needed

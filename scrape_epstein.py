@@ -38,6 +38,36 @@ def load_inventory():
         except Exception as e:
             print(f"Failed to load inventory: {e}")
 
+def refresh_session(context):
+    """
+    Refreshes the browser session by navigating to the home page.
+    Used when 401 Unauthorized is encountered.
+    """
+    print("re-authenticating/refreshing session...")
+    try:
+        page = context.new_page()
+        # Apply stealth if available (we assume it's set up in context or we can try importing if needed, 
+        # but stealth_sync is global import so we can use it)
+        if stealth_sync: stealth_sync(page)
+        
+        page.goto(BASE_URL, wait_until='domcontentloaded', timeout=45000)
+        try:
+             page.wait_for_load_state('networkidle', timeout=5000)
+        except:
+             pass
+        time.sleep(5) # Let Akamai/cookies settle
+        
+        # Check robot check
+        content = page.content()
+        if "I am not a robot" in content or "Access Denied" in page.title():
+             print("Hit robot check during refresh! User interaction may be needed.")
+             if True: # We assume we are in headful or at least visible if possible, but automated solving is hard
+                  time.sleep(5) 
+        
+        page.close()
+    except Exception as e:
+        print(f"Session refresh failed: {e}")
+
 
 def normalize_url(url):
     return url.split('#')[0]
@@ -149,124 +179,89 @@ def download_file(context, url, meta):
     print(f"Processing download for: {url}")
     try:
         page = context.new_page()
-        # Apply stealth if possible (though we did it on context level? stealth_sync needs page)
-        if stealth_sync:
-            stealth_sync(page)
+        if stealth_sync: stealth_sync(page)
+        
+        # Strategy: Force Browser Download via JS
+        # This uses the browser's native networking (so cookies/auth apply) 
+        # and streams to disk (via Playwright download manager) rather than buffering in memory.
+        
+        # 1. Navigate to context page (so cookies apply relative to domain)
+        landing_url = meta.get("source_page", BASE_URL)
+        try:
+            page.goto(landing_url, wait_until='domcontentloaded', timeout=45000)
+        except Exception as e_nav:
+            print(f"Navigation to source page warning: {e_nav}")
             
-        with page.expect_download(timeout=30000) as download_info:
-            try:
-                response = page.goto(url, wait_until='commit', timeout=30000)
-                # Check for PDF viewer etc...
-            except Exception:
-                pass
-        
+        # 2. Trigger Download
+        with page.expect_download(timeout=1200000) as download_info: # 20 mins timeout for download start? No, wait, expectation is for START.
+            # Actually expect_download waits for the event. The download itself can take longer.
+            # But we need to ensure the click happens.
+            
+            js_code = f"""
+                const a = document.createElement('a');
+                a.href = "{url}";
+                a.download = "{os.path.basename(urlparse(url).path)}"; 
+                document.body.appendChild(a);
+                a.click();
+            """
+            page.evaluate(js_code)
+            
         download = download_info.value
-        filename = os.path.basename(unquote(urlparse(url).path))
-        if not filename or len(filename) < 3:
-             filename = f"file_{int(time.time())}.dat"
         
-        # Sanitize
+        # Determine filename
+        filename = download.suggested_filename
+        if not filename or len(filename) < 3:
+             filename = os.path.basename(unquote(urlparse(url).path))
+             
+        # Sanitize and Path
         filename = re.sub(r'[^\w\-_\.]', '_', filename)
         filepath = os.path.join(OUTPUT_DIR, filename)
 
-        # Avoid Overwrite loop - find a unique filename
+        # Collision check
         base, ext = os.path.splitext(filename)
         counter = 1
         while os.path.exists(filepath):
-            # If the file exists, we need to check if it's the same file?
-            # Since we only call download_file for URLs not marked as 'downloaded',
-            # existence here likely means a collision with a DIFFERENT url (or a previous unrecorded run).
-            # We will generate a new name to be safe.
             new_filename = f"{base}_{counter}{ext}"
             filepath = os.path.join(OUTPUT_DIR, new_filename)
             counter += 1
 
+        print(f"Streaming download to: {filepath}...")
+        # Save as (which moves the temporary file)
         download.save_as(filepath)
             
         meta["local_path"] = filepath
         meta["status"] = "downloaded"
-        print(f"Downloaded: {filepath}")
+        
+        # Check size logic if needed, but save_as implies done.
+        meta["file_size"] = os.path.getsize(filepath)
+        print(f"Downloaded (Browser Stream): {filepath}")
+        
+        # Attempt Compression
+        try:
+            compressed_path = compress_media(filepath)
+            if compressed_path != filepath:
+                meta["local_path"] = compressed_path
+                meta["file_size"] = os.path.getsize(compressed_path)
+                print(f"Compressed/Processed to: {compressed_path}")
+                # Tag as compressed
+                if "tags" not in meta: meta["tags"] = []
+                if "compressed" not in meta["tags"]: meta["tags"].append("compressed")
+        except Exception as comp_e:
+            print(f"Compression failed: {comp_e}")
         
         page.close()
         return
 
     except Exception as e:
-        # Fallback using requests library for robust streaming of large files
+        print(f"Download (Browser Stream) failed {url}: {e}")
+        # Detect if it was a timeout or a 401 (hard to track exact status in download event)
+        # But if we are here, we failed.
+        meta["status"] = "failed"
+        meta["error"] = str(e)
         try:
-             print(f"Attempting requests-based stream for {url}")
-             
-             # Extract cookies from playwright context
-             cookies = context.cookies()
-             session = requests.Session()
-             for cookie in cookies:
-                 session.cookies.set(cookie['name'], cookie['value'], domain=cookie['domain'])
-             
-             headers = {
-                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-             }
-             if "source_page" in meta:
-                 headers["Referer"] = meta["source_page"]
-                 
-             # Stream download
-             # 30 minute timeout for connect; read timeout handled by streaming?
-             with session.get(url, headers=headers, stream=True, timeout=60) as r:
-                 r.raise_for_status()
-                 
-                 filename = os.path.basename(unquote(urlparse(url).path))
-                 if not filename or len(filename) < 3:
-                     filename = f"file_{int(time.time())}.dat"
-
-                 filename = re.sub(r'[^\w\-_\.]', '_', filename)
-                 filepath = os.path.join(OUTPUT_DIR, filename)
-
-                 # Collision check
-                 base, ext = os.path.splitext(filename)
-                 counter = 1
-                 while os.path.exists(filepath):
-                     new_filename = f"{base}_{counter}{ext}"
-                     filepath = os.path.join(OUTPUT_DIR, new_filename)
-                     counter += 1
-                 
-                 print(f"Streaming to {filepath}...")
-                 total_size = int(r.headers.get('content-length', 0))
-                 downloaded = 0
-                 
-                 with open(filepath, 'wb') as f:
-                     for chunk in r.iter_content(chunk_size=8192): 
-                         if chunk:
-                             f.write(chunk)
-                             downloaded += len(chunk)
-                             # Optional: Progress logging for huge files?
-                             if total_size > 100 * 1024 * 1024 and downloaded % (50 * 1024 * 1024) < 8192:
-                                  print(f"  ...{(downloaded/1024/1024):.1f} MB encoded")
-                                  
-                 meta["file_size"] = total_size
-                 print(f"Downloaded (Requests Stream): {filepath}")
-                 
-                 # Attempt Compression
-                 try:
-                     compressed_path = compress_media(filepath)
-                     if compressed_path != filepath:
-                         meta["local_path"] = compressed_path
-                         meta["file_size"] = os.path.getsize(compressed_path)
-                         print(f"Compressed/Processed to: {compressed_path}")
-                         # Tag as compressed
-                         if "tags" not in meta: meta["tags"] = []
-                         if "compressed" not in meta["tags"]: meta["tags"].append("compressed")
-                 except Exception as comp_e:
-                     print(f"Compression failed: {comp_e}")
-                 
-                 if not page.is_closed():
-                     page.close()
-                 return
-
-        except Exception as e2:
-             print(f"Download (requests) failed {url}: {e2}")
-             meta["status"] = "failed"
-             meta["error"] = str(e2)
-             if not page.is_closed():
-                 page.close()
-             return
+            if not page.is_closed(): page.close()
+        except: pass
+        return
 
 def compress_media(filepath):
     """
@@ -347,8 +342,7 @@ def main():
     parser.add_argument("--compress-existing", action="store_true", help="Compress all existing downloaded media files in inventory")
     args = parser.parse_args()
 
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     load_inventory()
     
@@ -409,6 +403,10 @@ def main():
             if stealth_sync: stealth_sync(page)
             try:
                 page.goto(BASE_URL, wait_until='domcontentloaded', timeout=45000)
+                try:
+                    page.wait_for_load_state('networkidle', timeout=5000)
+                except:
+                    pass
                 time.sleep(3) # Let Akamai/cookies settle
                 # Check robot
                 if "I am not a robot" in page.content() or "Access Denied" in page.title():

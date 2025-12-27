@@ -16,25 +16,26 @@ SIZES = {
 }
 
 def create_derivatives(file_path):
+    file_dir = os.path.dirname(file_path)
+    file_name = os.path.basename(file_path)
+    file_stem = os.path.splitext(file_name)[0]
+    
+    output_dir = os.path.join(file_dir, file_stem)
+    full_path = os.path.join(output_dir, "full.avif")
+
+    # Skip if already processed
+    if os.path.exists(full_path):
+        return False
+
     try:
         with Image.open(file_path) as img:
             # We must convert to RGB for AVIF if it's not already (e.g. RGBA or P)
             # AVIF supports transparency, but let's be safe standardizing if issues arise. 
             # Pillow's AVIF encoder supports RGBA.
             
-            # Determine output directory
-            # Structure: epstein_files/.../images/page11_img1.jpeg
-            # Output:    epstein_files/.../images/page11_img1/tiny.avif, etc.
-            
-            file_dir = os.path.dirname(file_path)
-            file_name = os.path.basename(file_path)
-            file_stem = os.path.splitext(file_name)[0]
-            
-            output_dir = os.path.join(file_dir, file_stem)
             os.makedirs(output_dir, exist_ok=True)
             
             # 1. Save Full (Optimized AVIF)
-            full_path = os.path.join(output_dir, "full.avif")
             img.save(full_path, "AVIF", quality=80, speed=6)
             
             # 2. Save Resized Versions
@@ -66,7 +67,8 @@ def create_derivatives(file_path):
 
 def main():
     abs_target_dir = os.path.abspath(TARGET_DIR)
-    print(f"Scanning {abs_target_dir} for images to process...")
+
+    print(f"Scanning {abs_target_dir} for images to process...", flush=True)
     
     count = 0
     success_count = 0
@@ -89,14 +91,19 @@ def main():
             if ext in IMAGE_EXTENSIONS:
                 file_path = os.path.join(root, file)
                 
+                # Optional: Print current file being processed (verbose)
+                # print(f"Processing: {file}", flush=True)
+                
                 if create_derivatives(file_path):
                     success_count += 1
                 
                 count += 1
-                if count % 100 == 0:
-                    print(f"Processed {count} images... ({success_count} successful)")
+                
+                # Update progress every 10 images for better feedback
+                if count % 10 == 0:
+                    print(f"Processed {count} images... ({success_count} successful). Last: {file}", flush=True)
 
-    print(f"Finished. Processed {count} images. Successfully generated derivatives for {success_count}.")
+    print(f"Finished. Processed {count} images. Successfully generated derivatives for {success_count}.", flush=True)
 
 if __name__ == "__main__":
     main()

@@ -77,11 +77,18 @@ The `epstein_files/` directory is organized by document ID. After running all st
 ```text
 epstein_files/
 ├── 001/
-│   ├── 001.pdf             # Original file
-│   ├── content.txt         # Extracted text content
+│   ├── 001.pdf                  # Original file
+│   ├── content.txt              # Extracted text content
 │   └── images/
-│       ├── page1_img1.jpg  # Extracted image
-│       └── page1_img1.json # AI Analysis (Type, Description, Objects)
+│       ├── page1_img1.jpg       # Original extracted image
+│       └── page1_img1/          # Analysis & Formats Directory
+│           ├── analysis.json    # AI Analysis (Type, Description, Objects)
+│           ├── ocr.txt          # OCR text (if text was detected)
+│           ├── full.avif        # Web-optimized full resolution
+│           ├── medium.avif      # Medium sized thumbnail
+│           ├── small.avif       # Small sized thumbnail
+│           ├── thumb.avif       # Thumbnail
+│           └── tiny.avif        # Tiny placeholder
 ├── 002/
 ...
 ```

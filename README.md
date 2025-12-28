@@ -51,8 +51,23 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     Uses a local LLM to analyze extracted images and generate structured JSON descriptions (`type`, `objects`, `ocr_needed`, etc.).
     
     **Requirements:**
-    *   **LM Studio** running on `http://localhost:1234`.
     *   Vision-capable model loaded (e.g., `mistralai/ministral-3-3b` or `llava`).
+
+6.  **Perform OCR**
+    ```bash
+    python perform_ocr.py [--dry-run]
+    ```
+    Walks through the `epstein_files` directory and performs OCR on images flagged with `"needs_ocr": true` in their `analysis.json` file.
+    
+    **Features:**
+    *   **Smart Selection**: Prioritizes original high-quality images (`.png`/`.jpg`) over compressed `.avif` if available.
+    *   **Auto-Resize**: Automatically resizes images larger than 2048px to prevent API errors.
+    *   **Resumable**: Skips directories where `ocr.txt` already exists.
+    *   **Dry Run**: Use `--dry-run` to see what files would be processed without making API calls.
+    
+    **Requirements:**
+    *   **LM Studio** running on `http://localhost:1234` (or configured URL).
+    *   An OCR-capable model loaded (recommended: `allenai/olmocr-2-7b`).
 
 
 

@@ -9,7 +9,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
 ### Features
 *   **Comprehensive Crawl**: Recursively finds files in subsections like Court Records and FOIA (FBI, BOP).
 *   **Bot Protection Bypass**: Uses `playwright-stealth` and user-like behavior to navigate Akamai protections.
-*   **Resumable**: Maintains a local `inventory.json` database. If the script is interrupted, simply run it again to pick up exactly where it left off.
+*   **Resumable**: Maintains a local `epstein_files/inventory.json` database. If the script is interrupted, simply run it again to pick up exactly where it left off.
 *   **Media Support**: Downloads PDFs, ZIPs, as well as media files like `.wav`, `.mp3`, and `.mp4`.
 *   **Collision Handling**: Automatically renames duplicate filenames (e.g. `file_1.pdf`) so no data is overwritten or lost.
 
@@ -29,14 +29,14 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     The script will:
     *   Create an `epstein_files/` directory.
     *   Crawl the Justice.gov pages.
-    *   Populate `inventory.json`.
+    *   Populate `epstein_files/inventory.json`.
     *   Download all new files.
 
 3.  **Classify Files** (Optional but Recommended)
     ```bash
     python classify_files.py
     ```
-    This script analyzes downloaded PDFs to determine if they are **Text** (searchable) or **Scanned** (images). It updates `inventory.json` with this classification, enabling targeted OCR processing.
+    This script analyzes downloaded PDFs to determine if they are **Text** (searchable) or **Scanned** (images). It updates `epstein_files/inventory.json` with this classification, enabling targeted OCR processing.
 
 4.  **Extract Content**
     ```bash
@@ -71,4 +71,4 @@ epstein_files/
 ...
 ```
 
-*   **`inventory.json`**: The source of truth database tracking every file's URL, download status, classification, and analysis progress.
+*   **`epstein_files/inventory.json`**: The source of truth database tracking every file's URL, download status, classification, and analysis progress.

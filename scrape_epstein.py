@@ -20,7 +20,7 @@ SEEDS = [
     "https://www.justice.gov/epstein/foia"
 ]
 OUTPUT_DIR = "epstein_files"
-INVENTORY_FILE = "inventory.json"
+INVENTORY_FILE = "epstein_files/inventory.json"
 
 # Set of visited URLs to avoid cycles
 visited_pages = set()

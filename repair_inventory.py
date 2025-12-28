@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 
-INVENTORY_FILE = "inventory.json"
+INVENTORY_FILE = "epstein_files/inventory.json"
 BACKUP_FILE = "inventory.json.corrupted_bak"
 
 def repair():

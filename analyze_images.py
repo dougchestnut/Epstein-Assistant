@@ -41,6 +41,7 @@ def analyze_image(image_path):
             "- \"objects_detected\": list of strings (names of key objects found, empty if none)\n"
             "- \"needs_ocr\": boolean (true if significant text is visible that needs extraction)\n"
             "- \"is_empty\": boolean (true if the image is blank, solid color, or noise)\n"
+            "- \"is_photo\": boolean (true if the image is a photograph of people/places, NOT a scanned document)\n"
             "- \"description\": string (a detailed visual description of the content)\n"
             "\nExample Output:\n"
             "{\n"
@@ -49,6 +50,7 @@ def analyze_image(image_path):
             "  \"objects_detected\": [],\n"
             "  \"needs_ocr\": true,\n"
             "  \"is_empty\": false,\n"
+            "  \"is_photo\": false,\n"
             "  \"description\": \"A scanned letter with handwritten signatures.\"\n"
             "}"
         )

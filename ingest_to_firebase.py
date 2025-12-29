@@ -83,6 +83,16 @@ def ingest_data(db, inventory_path):
             # img_name is usually "page1_img1"
             item_id = f"{doc_id}_{img_name}"
             
+            # Check for analysis.json
+            analysis_path = os.path.join(img_dir_path, "analysis.json")
+            analysis_data = {}
+            if os.path.exists(analysis_path):
+                try:
+                    with open(analysis_path, 'r') as af:
+                        analysis_data = json.load(af)
+                except Exception as e:
+                    print(f"Error reading analysis for {item_id}: {e}")
+
             # Base metadata from parent document
             item_data = {
                 "original_url": url,
@@ -91,7 +101,8 @@ def ingest_data(db, inventory_path):
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "doc_id": doc_id, # Reference to parent
                 "image_name": img_name,
-                "metadata": meta # Include original metadata
+                "metadata": meta, # Include original metadata
+                "analysis": analysis_data # Include image analysis (needs_ocr, is_empty, etc)
             }
 
             # Upload Thumb
@@ -121,4 +132,4 @@ if __name__ == "__main__":
     db = initialize_firebase()
     if db:
         # Placeholder for inventory path - expecting it in the current dir
-        ingest_data(db, "inventory.json")
+        ingest_data(db, "epstein_files/inventory.json")

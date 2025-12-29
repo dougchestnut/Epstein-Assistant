@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { collection, query, limit, getDocs, startAfter, orderBy, DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, query, limit, getDocs, startAfter, orderBy, where, DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase"; // Ensure this matches your export
 import Link from "next/link";
 import Image from "next/image"; // Note: Next.js Image component might need configuration for external domains
@@ -13,7 +13,7 @@ export default function Home() {
     const [hasMore, setHasMore] = useState(true);
     const observer = useRef<IntersectionObserver | null>(null);
 
-    const lastElementRef = useCallback((node: HTMLDivElement) => {
+    const lastElementRef = useCallback((node: HTMLAnchorElement | null) => {
         if (loading) return;
         if (observer.current) observer.current.disconnect();
         observer.current = new IntersectionObserver(entries => {
@@ -27,18 +27,32 @@ export default function Home() {
     const loadInitial = async () => {
         setLoading(true);
         try {
+            console.log("Fetching items...");
+            // Filter: needs_ocr == false AND is_empty == false
+            // This requires a composite index: analysis.needs_ocr ASC, analysis.is_empty ASC, created_at DESC
             const q = query(
                 collection(db, "items"),
+                where("analysis.needs_ocr", "==", false),
+                where("analysis.is_empty", "==", false),
                 orderBy("created_at", "desc"),
                 limit(20)
             );
             const snapshot = await getDocs(q);
+            console.log(`Found ${snapshot.docs.length} items`);
+
             const newItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setItems(newItems);
-            setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+
+            if (snapshot.docs.length > 0) {
+                setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+            }
             setHasMore(snapshot.docs.length === 20);
         } catch (err) {
-            console.error("Error loading items:", err);
+            console.error("Error loading items details:", err);
+            // @ts-ignore
+            if (err.code === 'failed-precondition') {
+                console.error("Index missing? Check console link.");
+            }
         }
         setLoading(false);
     };
@@ -49,6 +63,8 @@ export default function Home() {
         try {
             const q = query(
                 collection(db, "items"),
+                where("analysis.needs_ocr", "==", false),
+                where("analysis.is_empty", "==", false),
                 orderBy("created_at", "desc"),
                 startAfter(lastDoc),
                 limit(20)

@@ -69,6 +69,20 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     *   **LM Studio** running on `http://localhost:1234` (or configured URL).
     *   An OCR-capable model loaded (recommended: `allenai/olmocr-2-7b`).
 
+7.  **Transcribe Media**
+    ```bash
+    python transcribe_media.py [--model large-v2] [--device cpu|cuda]
+    ```
+    Transcribes audio/video files (mp3, wav, mp4, etc.) found in the inventory using WhisperX. It generates a `.vtt` subtitle file next to the media file.
+
+    **Requirements:**
+    *   **FFmpeg** must be installed and on your system PATH.
+    *   **WhisperX**:
+        ```bash
+        pip install git+https://github.com/m-bain/whisperX.git
+        ```
+    *   **HuggingFace Token** (Optional): Set `HF_TOKEN` in `.env` for speaker diarization (requires accepting pyannote terms).
+
 
 
 ### Output Structure

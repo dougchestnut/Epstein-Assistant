@@ -28,9 +28,7 @@ def load_inventory():
     with open(INVENTORY_FILE, 'r') as f:
         return json.load(f)
 
-def save_inventory(inventory):
-    with open(INVENTORY_FILE, 'w') as f:
-        json.dump(inventory, f, indent=2)
+
 
 def seconds_to_vtt_timestamp(seconds):
     hours = int(seconds // 3600)
@@ -90,7 +88,7 @@ def main():
         if local_path.lower().endswith(media_extensions):
             # Check if VTT exists
             vtt_path = os.path.splitext(local_path)[0] + ".vtt"
-            if not os.path.exists(vtt_path) or meta.get("transcription_status") != "done":
+            if not os.path.exists(vtt_path):
                 to_process.append((url, meta, local_path, vtt_path))
     
     if not to_process:
@@ -153,12 +151,7 @@ def main():
             meta["transcription_status"] = "done"
             meta["vtt_path"] = vtt_path
             
-            # Update inventory immediately
-            inventory = load_inventory() # Reload checking for race?
-            if url in inventory:
-                inventory[url]["transcription_status"] = "done"
-                inventory[url]["vtt_path"] = vtt_path
-                save_inventory(inventory)
+
                 
         except Exception as e:
             print(f"Error processing {local_path}: {e}")

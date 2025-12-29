@@ -3,3 +3,5 @@ requests>=2.0.0
 pymupdf
 pillow-heif
 firebase-admin
+python-dotenv
+

@@ -1,7 +1,9 @@
-Pillow>=12.0.0
+Pillow>=10.0.0
 requests>=2.0.0
 pymupdf
 pillow-heif
 firebase-admin
 python-dotenv
+opencv-python
+numpy
 

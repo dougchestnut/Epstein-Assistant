@@ -1,3 +1,4 @@
 .env
 epstein_files
 serviceAccountKey.json
+node_modules

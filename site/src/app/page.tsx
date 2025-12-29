@@ -28,12 +28,11 @@ export default function Home() {
         setLoading(true);
         try {
             console.log("Fetching items...");
-            // Filter: needs_ocr == false AND is_empty == false
-            // This requires a composite index: analysis.needs_ocr ASC, analysis.is_empty ASC, created_at DESC
+            // Filter: is_photo == true
+            // This requires a composite index: analysis.is_photo ASC, created_at DESC
             const q = query(
                 collection(db, "items"),
-                where("analysis.needs_ocr", "==", false),
-                where("analysis.is_empty", "==", false),
+                where("analysis.is_photo", "==", true),
                 orderBy("created_at", "desc"),
                 limit(20)
             );
@@ -63,8 +62,7 @@ export default function Home() {
         try {
             const q = query(
                 collection(db, "items"),
-                where("analysis.needs_ocr", "==", false),
-                where("analysis.is_empty", "==", false),
+                where("analysis.is_photo", "==", true),
                 orderBy("created_at", "desc"),
                 startAfter(lastDoc),
                 limit(20)

@@ -1,6 +1,10 @@
 import os
 import sys
 from PIL import Image
+import pillow_heif
+
+# Register AVIF opener
+pillow_heif.register_heif_opener()
 
 # Extensions to scan for
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.tiff', '.webp'}

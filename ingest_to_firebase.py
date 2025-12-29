@@ -6,7 +6,7 @@ import mimetypes
 
 # Configuration
 CREDENTIALS_PATH = "serviceAccountKey.json"  # User needs to provide this
-BUCKET_NAME = "epstein-assist.firebasestorage.app" # Placeholder, user needs to update
+BUCKET_NAME = "epstein-file-browser.firebasestorage.app" # Updated to confirmed bucket name
 COLLECTION_NAME = "items"
 
 def initialize_firebase():
@@ -47,41 +47,75 @@ def ingest_data(db, inventory_path):
     # Structure of inventory is key (url) -> metadata
     
     count = 0
+
+    images_count = 0
     for url, meta in inventory.items():
         doc_id = meta.get("id") or os.path.basename(meta.get("local_path", "unknown"))
         local_path = meta.get("local_path")
         
         if not local_path or not os.path.exists(local_path):
-            print(f"Skipping {doc_id}: Local file not found at {local_path}")
+            # print(f"Skipping {doc_id}: Local file not found at {local_path}")
             continue
 
-        # metadata construction
-        item_data = {
-            "original_url": url,
-            "title": meta.get("title") or doc_id,
-            "type": "document", # Default to document, adjust based on extension
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "metadata": meta
-        }
+        # The images are extracted into a folder with the same name as the pdf (minus extension)
+        # e.g. epstein_files/doc_id.pdf -> epstein_files/doc_id/images/
+        file_stem_path = os.path.splitext(local_path)[0]
+        images_dir = os.path.join(file_stem_path, "images")
 
-        # Upload main file
-        file_ext = os.path.splitext(local_path)[1]
-        storage_path = f"v1/documents/{doc_id}/original{file_ext}"
-        
-        # public_url = upload_file_to_storage(local_path, storage_path)
-        # item_data["storage_url"] = public_url
-        item_data["storage_path"] = storage_path # Store path for client-side usage if needed
+        if not os.path.exists(images_dir):
+            if count % 100 == 0: 
+                 print(f"No images directory for {doc_id} at {images_dir} (checking every 100th)")
+            continue
 
-        # Prepare images and other analysis artifacts
-        # TODO: Scan for generated AVIF images or analysis.json
+        # Iterate over extracted image folders
+        for img_name in os.listdir(images_dir):
+            img_dir_path = os.path.join(images_dir, img_name)
+            if not os.path.isdir(img_dir_path):
+                continue
+
+            thumb_path = os.path.join(img_dir_path, "thumb.avif")
+            medium_path = os.path.join(img_dir_path, "medium.avif")
+
+            if not os.path.exists(thumb_path):
+                continue
+            
+            # Construct a unique ID for this image item
+            # img_name is usually "page1_img1"
+            item_id = f"{doc_id}_{img_name}"
+            
+            # Base metadata from parent document
+            item_data = {
+                "original_url": url,
+                "title": f"{meta.get('title') or doc_id} - {img_name}",
+                "type": "image",
+                "created_at": firestore.SERVER_TIMESTAMP,
+                "doc_id": doc_id, # Reference to parent
+                "image_name": img_name,
+                "metadata": meta # Include original metadata
+            }
+
+            # Upload Thumb
+            storage_path_thumb = f"v1/images/{doc_id}/{img_name}/thumb.avif"
+            public_url_thumb = upload_file_to_storage(thumb_path, storage_path_thumb)
+            item_data["thumbnail_url"] = public_url_thumb
+            item_data["thumbnail_storage_path"] = storage_path_thumb
+
+            # Upload Medium
+            if os.path.exists(medium_path):
+                storage_path_medium = f"v1/images/{doc_id}/{img_name}/medium.avif"
+                public_url_medium = upload_file_to_storage(medium_path, storage_path_medium)
+                item_data["medium_url"] = public_url_medium
+                item_data["medium_storage_path"] = storage_path_medium
+
+            # Upsert
+            doc_ref = db.collection(COLLECTION_NAME).document(item_id)
+            doc_ref.set(item_data, merge=True)
+            print(f"Upserted image: {item_id}")
+            images_count += 1
         
-        # Write to Firestore
-        doc_ref = db.collection(COLLECTION_NAME).document(doc_id)
-        doc_ref.set(item_data, merge=True)
-        print(f"Upserted Firestore doc: {doc_id}")
         count += 1
 
-    print(f"Ingestion complete. Processed {count} items.")
+    print(f"Ingestion complete. Processed {count} documents, created/updated {images_count} image items.")
 
 if __name__ == "__main__":
     db = initialize_firebase()

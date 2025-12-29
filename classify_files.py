@@ -2,7 +2,7 @@ import os
 import json
 import fitz  # pymupdf
 
-INVENTORY_FILE = "inventory.json"
+INVENTORY_FILE = "epstein_files/inventory.json"
 PDF_DIR = "epstein_files"
 
 def load_inventory():

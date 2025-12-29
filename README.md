@@ -9,7 +9,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
 ### Features
 *   **Comprehensive Crawl**: Recursively finds files in subsections like Court Records and FOIA (FBI, BOP).
 *   **Bot Protection Bypass**: Uses `playwright-stealth` and user-like behavior to navigate Akamai protections.
-*   **Resumable**: Maintains a local `inventory.json` database. If the script is interrupted, simply run it again to pick up exactly where it left off.
+*   **Resumable**: Maintains a local `epstein_files/inventory.json` database. If the script is interrupted, simply run it again to pick up exactly where it left off.
 *   **Media Support**: Downloads PDFs, ZIPs, as well as media files like `.wav`, `.mp3`, and `.mp4`.
 *   **Collision Handling**: Automatically renames duplicate filenames (e.g. `file_1.pdf`) so no data is overwritten or lost.
 
@@ -29,14 +29,14 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     The script will:
     *   Create an `epstein_files/` directory.
     *   Crawl the Justice.gov pages.
-    *   Populate `inventory.json`.
+    *   Populate `epstein_files/inventory.json`.
     *   Download all new files.
 
 3.  **Classify Files** (Optional but Recommended)
     ```bash
     python classify_files.py
     ```
-    This script analyzes downloaded PDFs to determine if they are **Text** (searchable) or **Scanned** (images). It updates `inventory.json` with this classification, enabling targeted OCR processing.
+    This script analyzes downloaded PDFs to determine if they are **Text** (searchable) or **Scanned** (images). It updates `epstein_files/inventory.json` with this classification, enabling targeted OCR processing.
 
 4.  **Extract Content**
     ```bash
@@ -51,8 +51,23 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     Uses a local LLM to analyze extracted images and generate structured JSON descriptions (`type`, `objects`, `ocr_needed`, etc.).
     
     **Requirements:**
-    *   **LM Studio** running on `http://localhost:1234`.
     *   Vision-capable model loaded (e.g., `mistralai/ministral-3-3b` or `llava`).
+
+6.  **Perform OCR**
+    ```bash
+    python perform_ocr.py [--dry-run]
+    ```
+    Walks through the `epstein_files` directory and performs OCR on images flagged with `"needs_ocr": true` in their `analysis.json` file.
+    
+    **Features:**
+    *   **Smart Selection**: Prioritizes original high-quality images (`.png`/`.jpg`) over compressed `.avif` if available.
+    *   **Auto-Resize**: Automatically resizes images larger than 2048px to prevent API errors.
+    *   **Resumable**: Skips directories where `ocr.txt` already exists.
+    *   **Dry Run**: Use `--dry-run` to see what files would be processed without making API calls.
+    
+    **Requirements:**
+    *   **LM Studio** running on `http://localhost:1234` (or configured URL).
+    *   An OCR-capable model loaded (recommended: `allenai/olmocr-2-7b`).
 
 
 
@@ -62,13 +77,20 @@ The `epstein_files/` directory is organized by document ID. After running all st
 ```text
 epstein_files/
 ├── 001/
-│   ├── 001.pdf             # Original file
-│   ├── content.txt         # Extracted text content
+│   ├── 001.pdf                  # Original file
+│   ├── content.txt              # Extracted text content
 │   └── images/
-│       ├── page1_img1.jpg  # Extracted image
-│       └── page1_img1.json # AI Analysis (Type, Description, Objects)
+│       ├── page1_img1.jpg       # Original extracted image
+│       └── page1_img1/          # Analysis & Formats Directory
+│           ├── analysis.json    # AI Analysis (Type, Description, Objects)
+│           ├── ocr.txt          # OCR text (if text was detected)
+│           ├── full.avif        # Web-optimized full resolution
+│           ├── medium.avif      # Medium sized thumbnail
+│           ├── small.avif       # Small sized thumbnail
+│           ├── thumb.avif       # Thumbnail
+│           └── tiny.avif        # Tiny placeholder
 ├── 002/
 ...
 ```
 
-*   **`inventory.json`**: The source of truth database tracking every file's URL, download status, classification, and analysis progress.
+*   **`epstein_files/inventory.json`**: The source of truth database tracking every file's URL, download status, classification, and analysis progress.

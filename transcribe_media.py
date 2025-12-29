@@ -19,7 +19,7 @@ try:
 except ImportError:
     whisperx = None
 
-INVENTORY_FILE = "inventory.json"
+INVENTORY_FILE = "epstein_files/inventory.json"
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 def load_inventory():

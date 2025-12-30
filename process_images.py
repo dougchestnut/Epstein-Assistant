@@ -4,7 +4,12 @@ import json
 import argparse
 from PIL import Image
 import pillow_heif
+import argparse
+from PIL import Image
+import pillow_heif
 import fitz # PyMuPDF
+import concurrent.futures
+import multiprocessing
 
 # Register AVIF opener
 pillow_heif.register_heif_opener()
@@ -150,7 +155,31 @@ def process_pdf(file_path, metadata=None, overwrite=False):
         print(f"Error processing PDF {file_path}: {e}")
         return False
 
+        return True
+
+    except Exception as e:
+        print(f"Error processing PDF {file_path}: {e}")
+        return False
+
+def process_single_task(task):
+    """
+    Worker function for parallel processing.
+    task is a tuple: (type, file_path, metadata, overwrite)
+    """
+    try:
+        kind, file_path, metadata, overwrite = task
+        if kind == 'image':
+            return create_derivatives(file_path, overwrite=overwrite)
+        elif kind == 'pdf':
+            return process_pdf(file_path, metadata=metadata, overwrite=overwrite)
+    except Exception as e:
+        print(f"Worker Error on {file_path}: {e}")
+    return False
+
 def main():
+    # Helper for Windows multiprocessing
+    multiprocessing.freeze_support()
+    
     parser = argparse.ArgumentParser(description="Process images and PDFs to generate AVIF derivatives.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output files.")
     parser.add_argument("--just", choices=["documents", "extracted"], help="Process only specific type (documents=PDFs, extracted=images).")
@@ -173,10 +202,9 @@ def main():
         except Exception as e:
             print(f"Error loading inventory: {e}")
 
-    print(f"Scanning {abs_target_dir} for images to process...", flush=True)
+    print(f"Scanning {abs_target_dir} for images/PDFs to process...", flush=True)
     
-    count = 0
-    success_count = 0
+    tasks = []
     
     for root, dirs, files in os.walk(abs_target_dir):
         # We need to be careful not to process the generated AVIFs if we re-run
@@ -198,12 +226,8 @@ def main():
                     continue
 
                 file_path = os.path.join(root, file)
-                
-                # Optional: Print current file being processed (verbose)
-                # print(f"Processing: {file}", flush=True)
-                
-                if create_derivatives(file_path, overwrite=args.overwrite):
-                    success_count += 1
+                # Task: ('image', path, None, overwrite)
+                tasks.append( ('image', file_path, None, args.overwrite) )
             
             elif ext == '.pdf':
                 if args.just == 'extracted':
@@ -212,20 +236,36 @@ def main():
                 file_path = os.path.join(root, file)
                 # Lookup metadata
                 meta = inventory_map.get(os.path.abspath(file_path))
-                if not meta:
-                    # Try fuzzy matching or relative path if needed, but abs path should work
-                    pass
+                
+                # Task: ('pdf', path, meta, overwrite)
+                tasks.append( ('pdf', file_path, meta, args.overwrite) )
 
-                if process_pdf(file_path, metadata=meta, overwrite=args.overwrite):
+    total_tasks = len(tasks)
+    print(f"Found {total_tasks} files to process. Starting pool...", flush=True)
+    
+    success_count = 0
+    processed_count = 0
+    
+    # Use ProcessPoolExecutor to run tasks in parallel
+    # max_workers=None defaults to number of processors on the machine
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        # Submit all tasks
+        futures = [executor.submit(process_single_task, t) for t in tasks]
+        
+        # As they complete
+        for future in concurrent.futures.as_completed(futures):
+            processed_count += 1
+            try:
+                result = future.result()
+                if result:
                     success_count += 1
-                
-                count += 1
-                
-                # Update progress every 10 images for better feedback
-                if count % 10 == 0:
-                    print(f"Processed {count} images... ({success_count} successful). Last: {file}", flush=True)
+            except Exception as e:
+                print(f"Task generated an exception: {e}")
 
-    print(f"Finished. Processed {count} images. Successfully generated derivatives for {success_count}.", flush=True)
+            if processed_count % 10 == 0:
+                 print(f"Progress: {processed_count}/{total_tasks} ({success_count} success)", flush=True)
+
+    print(f"Finished. Processed {processed_count} files. Successfully generated derivatives for {success_count}.", flush=True)
 
 if __name__ == "__main__":
     main()

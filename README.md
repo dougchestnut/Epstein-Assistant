@@ -44,7 +44,18 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     ```
     Extracts embedded images and text from the PDFs into dedicated subdirectories (e.g., `epstein_files/001/images/`).
 
-5.  **Image Analysis**
+5.  **Process Images**
+    ```bash
+    python process_images.py [--overwrite] [--just documents|extracted]
+    ```
+    Generates web-optimized AVIF derivatives for all images and PDFs found in the inventory.
+    *   **Documents (PDFs)**: Generates a lightweight preview (`medium.avif` at 800px, Page 1 only) and an `info.json` with metadata.
+    *   **Extracted Images**: Generates sized derivatives (tiny, thumb, small, medium, full).
+    *   **Flags**:
+        *   `--overwrite`: Force regeneration of existing files (useful for applying new quality settings).
+        *   `--just`: Limit scope to `documents` (PDFs only) or `extracted` (Images only).
+
+6.  **Image Analysis**
     ```bash
     python analyze_images.py [--overwrite]
     ```
@@ -53,7 +64,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     **Requirements:**
     *   Vision-capable model loaded (e.g., `mistralai/ministral-3-3b` or `llava`).
 
-6.  **Perform OCR**
+7.  **Perform OCR**
     ```bash
     python perform_ocr.py [--dry-run]
     ```
@@ -69,7 +80,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     *   **LM Studio** running on `http://localhost:1234` (or configured URL).
     *   An OCR-capable model loaded (recommended: `allenai/olmocr-2-7b`).
 
-7.  **Transcribe Media**
+8.  **Transcribe Media**
     ```bash
     python transcribe_media.py [--model large-v2] [--device cpu|cuda]
     ```

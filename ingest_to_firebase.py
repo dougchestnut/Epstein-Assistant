@@ -93,6 +93,16 @@ def ingest_data(db, inventory_path):
                 except Exception as e:
                     print(f"Error reading analysis for {item_id}: {e}")
 
+            # Check for eval.json (New)
+            eval_path = os.path.join(img_dir_path, "eval.json")
+            eval_data = {}
+            if os.path.exists(eval_path):
+                try:
+                    with open(eval_path, 'r') as ef:
+                        eval_data = json.load(ef)
+                except Exception as e:
+                    print(f"Error reading eval for {item_id}: {e}")
+
             # Base metadata from parent document
             item_data = {
                 "original_url": url,
@@ -102,7 +112,9 @@ def ingest_data(db, inventory_path):
                 "doc_id": doc_id, # Reference to parent
                 "image_name": img_name,
                 "metadata": meta, # Include original metadata
-                "analysis": analysis_data # Include image analysis (needs_ocr, is_empty, etc)
+                "analysis": analysis_data, # Include image analysis (needs_ocr, is_empty, etc)
+                "eval": eval_data, # Include evaluation data (is_likely_photo)
+                "is_likely_photo": eval_data.get("is_likely_photo", False) # Top-level promotion for easier querying
             }
 
             # Upload Thumb

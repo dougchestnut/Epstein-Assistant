@@ -79,7 +79,7 @@ def process_directory(directory, dry_run=False):
         return
 
     try:
-        with open(analysis_path, 'r') as f:
+        with open(analysis_path, 'r', encoding='utf-8') as f:
             analysis = json.load(f)
     except json.JSONDecodeError:
         print(f"Error decoding JSON at {analysis_path}. Skipping.")
@@ -125,7 +125,7 @@ def process_directory(directory, dry_run=False):
     transcription = perform_ocr(image_path)
     
     if transcription:
-        with open(ocr_path, "w") as f:
+        with open(ocr_path, "w", encoding='utf-8') as f:
             f.write(transcription)
         print(f"Saved OCR to {ocr_path}")
     else:

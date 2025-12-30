@@ -80,7 +80,18 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     *   **LM Studio** running on `http://localhost:1234` (or configured URL).
     *   An OCR-capable model loaded (recommended: `allenai/olmocr-2-7b`).
 
-8.  **Transcribe Media**
+8.  **Perform PDF OCR**
+    ```bash
+    python perform_pdf_ocr.py [--dry-run] [--overwrite]
+    ```
+    Performs page-by-page OCR on the full PDF documents using LM Studio. This is useful for documents that are scanned images without embedded text.
+    *   **Features**:
+        *   Renders each page to a high-quality PNG (1288px max dimension).
+        *   Sends page + expert prompt to LM Studio.
+        *   Aggregates pages into a single `ocr.md` markdown file.
+    *   **Requirements**: Same as Image OCR (LM Studio + Vision Model).
+
+9.  **Transcribe Media**
     ```bash
     python transcribe_media.py [--model large-v2] [--device cpu|cuda]
     ```

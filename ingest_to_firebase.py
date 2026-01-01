@@ -115,10 +115,39 @@ def ingest_documents(db, inventory):
         url_m = safe_upload(medium_path, storage_path_m, "image/avif")
         url_t = safe_upload(thumb_path, storage_path_t, "image/avif")
         
+        # Text/Markdown Integration
+        content_map = {}
+        ocr_map = {}
+        
+        for name in ["content.txt", "content.md", "ocr.txt", "ocr.md"]:
+             local_f = os.path.join(output_dir, name)
+             if os.path.exists(local_f):
+                 storage_f = f"v1/documents/{doc_id}/{name}"
+                 # Use text/plain or text/markdown
+                 ctype = "text/markdown" if name.endswith(".md") else "text/plain"
+                 url_f = safe_upload(local_f, storage_f, ctype)
+                 
+                 if url_f:
+                     if name.startswith("content"):
+                         key = "markdown_url" if name.endswith(".md") else "text_url"
+                         content_map[key] = url_f
+                     elif name.startswith("ocr"):
+                         key = "markdown_url" if name.endswith(".md") else "text_url"
+                         ocr_map[key] = url_f
+        
         if not url_m or not url_t:
              print(f"Failed to upload previews for {doc_id}, skipping Firestore update.")
              continue
         
+        # Doc Info Data
+        info_path = os.path.join(output_dir, "info.json")
+        info_data = {}
+        if os.path.exists(info_path):
+            try:
+                with open(info_path, 'r') as f:
+                    info_data = json.load(f)
+            except: pass
+
         # Data
         doc_data = {
             "title": meta.get("link_text") or file_stem,
@@ -127,6 +156,9 @@ def ingest_documents(db, inventory):
             "preview_medium": url_m,
             "preview_thumb": url_t,
             "filename": os.path.basename(local_path),
+            "content": content_map,
+            "ocr": ocr_map,
+            "info": info_data,
             "ingested_at": firestore.SERVER_TIMESTAMP
         }
         
@@ -205,6 +237,27 @@ def ingest_images(db, inventory):
 
             url_m = safe_upload(medium_path, storage_path_m, "image/avif")
             url_t = safe_upload(thumb_path, storage_path_t, "image/avif")
+
+            # Text/Markdown Integration for Images
+            ocr_map = {}
+            for name in ["ocr.txt", "ocr.md"]:
+                 local_f = os.path.join(img_dir, name)
+                 if os.path.exists(local_f):
+                     storage_f = f"v1/images/{doc_id}/{img_name}/{name}"
+                     ctype = "text/markdown" if name.endswith(".md") else "text/plain"
+                     url_f = safe_upload(local_f, storage_f, ctype)
+                     if url_f:
+                         key = "markdown_url" if name.endswith(".md") else "text_url"
+                         ocr_map[key] = url_f
+
+            # Analysis Data
+            analysis_path = os.path.join(img_dir, "analysis.json")
+            analysis_data = {}
+            if os.path.exists(analysis_path):
+                try: 
+                    with open(analysis_path, 'r') as f:
+                        analysis_data = json.load(f)
+                except: pass
             
             if not url_m or not url_t:
                  continue
@@ -230,6 +283,8 @@ def ingest_images(db, inventory):
                 "preview_thumb": url_t,
                 "image_name": img_name,
                 "eval": eval_data,
+                "ocr": ocr_map,
+                "analysis": analysis_data,
                 "ingested_at": firestore.SERVER_TIMESTAMP
             }
             

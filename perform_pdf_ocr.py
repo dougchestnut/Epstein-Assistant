@@ -100,15 +100,14 @@ def perform_ocr_on_page(base64_image, page_num):
         print(f"Error OCRing page {page_num}: {e}")
         return None
 
-def process_pdf(pdf_path, dry_run=False, overwrite=False):
-    file_dir = os.path.dirname(pdf_path)
-    file_name = os.path.basename(pdf_path)
-    ocr_path = os.path.join(file_dir, "ocr.md")
+def process_pdf(pdf_path, output_dir, dry_run=False, overwrite=False):
+    ocr_path = os.path.join(output_dir, "ocr.md")
     
     if os.path.exists(ocr_path) and not overwrite:
         return
 
     print(f"Processing PDF: {pdf_path}")
+    print(f"  -> Output: {ocr_path}")
     
     try:
         doc = fitz.open(pdf_path)
@@ -161,51 +160,30 @@ def main():
 
     print(f"Scanning {abs_root} for PDFs to OCR...")
     
-    # We want to find the PDFs that are inside the ID directories
-    # Strategy: Walk logic similar to process_images
-    
+    count = 0
     for root, dirs, files in os.walk(abs_root):
         for file in files:
             if file.lower().endswith('.pdf'):
-                # We typically only want to process the "main" numbered PDF for that folder
-                # But actually, users have different structures.
-                # Let's just process ANY pdf we find, placing ocr.md next to it.
-                # Wait, if we have multiple PDFs in one folder (e.g. 001.pdf and 001_1.pdf),
-                # we can't name them ALL 'ocr.md' or we will overwrite.
-                # Logic check:
-                # If file is '001.pdf', output 'ocr.md' (primary).
-                # If file is '001_1.pdf', output '001_1_ocr.md'? 
-                # The user request said: "concat ... into an ocr.md file in the documents directory (alongside the content.txt and info.json files)."
-                # Usually there is ONE main pdf per folder in this dataset structure (epstein_files/DOCID/DOCID.pdf).
-                # But sometimes duplicates exist.
-                # Let's look at file structure.
-                # If file equals the directory name (e.g. 001/001.pdf), call it ocr.md.
-                # If not, call it {filename}_ocr.md to be safe?
-                
                 pdf_path = os.path.join(root, file)
-                
-                # Naming Logic
-                folder_name = os.path.basename(root)
                 name_stem = os.path.splitext(file)[0]
+                folder_name = os.path.basename(root)
                 
+                target_dir = None
+                
+                # Case 1: PDF is inside the document directory (e.g. 001/001.pdf)
                 if name_stem == folder_name:
-                    # Primary file
-                    process_pdf(pdf_path, dry_run=args.dry_run, overwrite=args.overwrite)
-                else:
-                    # Collateral file? 
-                    # For now, let's stick to the user instruction "OCR on the pdf documents themselves".
-                    # I will process all of them, but I need to handle the output filename collision if multiple PDFs exist in one dir.
-                    # Actually, process_pdf() defines output as `os.path.join(file_dir, "ocr.md")`.
-                    # This implies 1 PDF per directory.
-                    # If there are multiple, they will fight.
-                    # Let's check if the directory *IS* a document directory.
-                    
-                    # Heuristic: does it have 'info.json'?
-                    if os.path.exists(os.path.join(root, "info.json")):
-                        # It is a document dir.
-                        # Does the PDF match the folder name?
-                        if name_stem == folder_name:
-                             process_pdf(pdf_path, dry_run=args.dry_run, overwrite=args.overwrite)
+                     target_dir = root
+                     
+                # Case 2: PDF is a sibling of the document directory (e.g. 001.pdf and 001/ directory exist in same root)
+                elif os.path.isdir(os.path.join(root, name_stem)):
+                     target_dir = os.path.join(root, name_stem)
+                
+                # Check validation (must have info.json to be considered a 'document folder')
+                if target_dir and os.path.exists(os.path.join(target_dir, "info.json")):
+                    process_pdf(pdf_path, target_dir, dry_run=args.dry_run, overwrite=args.overwrite)
+                    count += 1
+    
+    print(f"Finished. Processed {count} PDFs.")
 
 if __name__ == "__main__":
     main()

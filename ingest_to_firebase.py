@@ -42,6 +42,24 @@ def upload_file_to_storage(local_path, destination_path, content_type=None):
     print(f"Uploaded: {destination_path}")
     return blob.public_url
 
+def safe_upload(local_path, destination_path, content_type=None):
+    """
+    Wrapper for upload_file_to_storage that handles network drive instability.
+    Returns None if upload fails or file is missing.
+    """
+    if not os.path.exists(local_path):
+        # Double check existence right before upload due to network lag
+        return None
+
+    try:
+        return upload_file_to_storage(local_path, destination_path, content_type)
+    except OSError as e:
+        print(f"Network error uploading {local_path}: {e}")
+        return None
+    except Exception as e:
+        print(f"Error uploading {local_path}: {e}")
+        return None
+
 def parse_page_num(img_name):
     # e.g. "page11_img1" -> 11
     match = re.search(r'page(\d+)', img_name)
@@ -91,8 +109,15 @@ def ingest_documents(db, inventory):
         storage_path_m = f"v1/documents/{doc_id}/medium.avif"
         storage_path_t = f"v1/documents/{doc_id}/thumb.avif"
         
-        url_m = upload_file_to_storage(medium_path, storage_path_m, "image/avif")
-        url_t = upload_file_to_storage(thumb_path, storage_path_t, "image/avif")
+        if not os.path.exists(thumb_path):
+            continue
+
+        url_m = safe_upload(medium_path, storage_path_m, "image/avif")
+        url_t = safe_upload(thumb_path, storage_path_t, "image/avif")
+        
+        if not url_m or not url_t:
+             print(f"Failed to upload previews for {doc_id}, skipping Firestore update.")
+             continue
         
         # Data
         doc_data = {
@@ -175,8 +200,14 @@ def ingest_images(db, inventory):
             storage_path_m = f"v1/images/{doc_id}/{img_name}/medium.avif"
             storage_path_t = f"v1/images/{doc_id}/{img_name}/thumb.avif"
             
-            url_m = upload_file_to_storage(medium_path, storage_path_m, "image/avif")
-            url_t = upload_file_to_storage(thumb_path, storage_path_t, "image/avif")
+            if not os.path.exists(thumb_path):
+                continue
+
+            url_m = safe_upload(medium_path, storage_path_m, "image/avif")
+            url_t = safe_upload(thumb_path, storage_path_t, "image/avif")
+            
+            if not url_m or not url_t:
+                 continue
             
             # Construct ID
             # "https://.../001.pdf#page11_img1"

@@ -5,8 +5,8 @@ import requests
 import time
 
 INVENTORY_FILE = "epstein_files/inventory.json"
-#LM_STUDIO_URL = "http://127.0.0.1:1234/v1/chat/completions"
-LM_STUDIO_URL = "http://192.168.7.142:1234/v1/chat/completions"
+LM_STUDIO_URL = "http://127.0.0.1:1234/v1/chat/completions"
+#LM_STUDIO_URL = "http://192.168.7.142:1234/v1/chat/completions"
 MODEL = "mistralai/ministral-3-3b"
 
 def load_inventory():

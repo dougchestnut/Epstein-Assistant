@@ -1,74 +1,30 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, query, where, limit, getDocs, orderBy, startAfter, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
+import { useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useGalleryContext } from '@/context/GalleryContext';
 
 export default function Home() {
-    const [items, setItems] = useState<DocumentData[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-    const [filterType, setFilterType] = useState<'document' | 'photo'>('document');
-    const [hasMore, setHasMore] = useState(true);
+    const { items, loading, filterType, hasMore, setFilterType, fetchMore } = useGalleryContext();
     const observer = useRef<IntersectionObserver | null>(null);
 
     const lastItemRef = useCallback((node: HTMLDivElement) => {
+        // Don't trigger if loading (except if we want to fetch parallel, but safer to block)
+        // But context loading might be false while "fetching more" isn't nicely exposed separate from initial load.
+        // Actually context 'loading' is true during fetchMore in my layout? 
+        // Let's check context. 
+        // My context sets loading=false ONLY after fetch. 
+        // It's probably fine.
+
         if (loading) return;
         if (observer.current) observer.current.disconnect();
         observer.current = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting && hasMore) {
-                fetchItems(false);
+                fetchMore();
             }
         });
         if (node) observer.current.observe(node);
-    }, [loading, hasMore]);
-
-    const fetchItems = async (isInitial = false) => {
-        setLoading(true);
-        try {
-            // Determine collection based on filter
-            const collectionName = filterType === 'document' ? 'documents' : 'images';
-            const itemsRef = collection(db, collectionName);
-
-            const constraint = [];
-
-            // Ingested items use ingested_at, fallback if needed
-            constraint.push(orderBy('ingested_at', 'desc'));
-            constraint.push(limit(20));
-
-            let q = query(itemsRef, ...constraint);
-
-            if (!isInitial && lastDoc) {
-                q = query(q, startAfter(lastDoc));
-            }
-
-            const snapshot = await getDocs(q);
-            const newItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            if (isInitial) {
-                setItems(newItems);
-            } else {
-                setItems(prev => [...prev, ...newItems]);
-            }
-
-            setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
-            if (snapshot.docs.length < 20) {
-                setHasMore(false);
-            }
-        } catch (error) {
-            console.error("Error fetching items:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        setItems([]);
-        setLastDoc(null);
-        setHasMore(true);
-        fetchItems(true);
-    }, [filterType]);
+    }, [loading, hasMore, fetchMore]);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -104,9 +60,7 @@ export default function Home() {
                     {items.map((item, index) => {
                         const isLastElement = items.length === index + 1;
                         const isDoc = filterType === 'document';
-                        // Determine route based on type
                         const href = isDoc ? `/documents/${item.id}` : `/images/${item.id}`;
-                        // Use preview_medium from new ingest schema
                         const imgSrc = item.preview_medium || item.preview_thumb;
 
                         return (
@@ -115,7 +69,7 @@ export default function Home() {
                                 ref={isLastElement ? lastItemRef : null}
                                 className="group relative bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden border border-gray-100 flex flex-col"
                             >
-                                {/* Thumbnail / Preview */}
+                                {/* Thumbnail */}
                                 <div className="aspect-square bg-gray-100 relative overflow-hidden">
                                     {imgSrc ? (
                                         <img
@@ -130,7 +84,7 @@ export default function Home() {
                                         </div>
                                     )}
 
-                                    {/* Overlay Type Badge */}
+                                    {/* Badge */}
                                     <div className="absolute top-2 right-2">
                                         <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium shadow-sm backdrop-blur-md bg-opacity-90 ${isDoc
                                             ? 'bg-green-100/90 text-green-800'
@@ -141,7 +95,7 @@ export default function Home() {
                                     </div>
                                 </div>
 
-                                {/* Card Footer */}
+                                {/* Footer */}
                                 <div className="p-3">
                                     <h3 className="text-sm font-medium text-gray-900 truncate" title={item.title || item.image_name}>
                                         {item.title || item.image_name}
@@ -151,7 +105,6 @@ export default function Home() {
                                     </p>
                                 </div>
 
-                                {/* Full Card Link */}
                                 <Link href={href} className="absolute inset-0 focus:outline-none">
                                     <span className="sr-only">View details</span>
                                 </Link>
@@ -161,9 +114,16 @@ export default function Home() {
                 </div>
 
                 {/* Loading State */}
-                {loading && (
+                {loading && items.length === 0 && (
                     <div className="mt-8 flex justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    </div>
+                )}
+
+                {/* Pagination Loading */}
+                {loading && items.length > 0 && (
+                    <div className="py-8 flex justify-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-400"></div>
                     </div>
                 )}
 

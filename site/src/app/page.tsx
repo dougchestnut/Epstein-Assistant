@@ -9,7 +9,7 @@ export default function Home() {
     const [items, setItems] = useState<DocumentData[]>([]);
     const [loading, setLoading] = useState(true);
     const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-    const [filterType, setFilterType] = useState<'all' | 'document' | 'photo'>('photo');
+    const [filterType, setFilterType] = useState<'document' | 'photo'>('document');
     const [hasMore, setHasMore] = useState(true);
     const observer = useRef<IntersectionObserver | null>(null);
 
@@ -27,22 +27,17 @@ export default function Home() {
     const fetchItems = async (isInitial = false) => {
         setLoading(true);
         try {
-            const itemsRef = collection(db, 'items');
-            let q;
+            // Determine collection based on filter
+            const collectionName = filterType === 'document' ? 'documents' : 'images';
+            const itemsRef = collection(db, collectionName);
 
             const constraint = [];
 
-            if (filterType === 'document') {
-                constraint.push(where('type', '==', 'document'));
-            } else if (filterType === 'photo') {
-                constraint.push(where('type', '==', 'image'));
-                constraint.push(where('is_likely_photo', '==', true));
-            }
-
-            constraint.push(orderBy('created_at', 'desc'));
+            // Ingested items use ingested_at, fallback if needed
+            constraint.push(orderBy('ingested_at', 'desc'));
             constraint.push(limit(20));
 
-            q = query(itemsRef, ...constraint);
+            let q = query(itemsRef, ...constraint);
 
             if (!isInitial && lastDoc) {
                 q = query(q, startAfter(lastDoc));
@@ -89,13 +84,13 @@ export default function Home() {
                     </div>
 
                     <div className="flex space-x-2 bg-white p-1 rounded-lg border border-gray-200 shadow-sm">
-                        {(['photo', 'document', 'all'] as const).map((type) => (
+                        {(['document', 'photo'] as const).map((type) => (
                             <button
                                 key={type}
                                 onClick={() => setFilterType(type)}
                                 className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${filterType === type
-                                        ? 'bg-indigo-600 text-white shadow-sm'
-                                        : 'text-gray-600 hover:bg-gray-50'
+                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                    : 'text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
                                 {type.charAt(0).toUpperCase() + type.slice(1)}s
@@ -108,6 +103,12 @@ export default function Home() {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                     {items.map((item, index) => {
                         const isLastElement = items.length === index + 1;
+                        const isDoc = filterType === 'document';
+                        // Determine route based on type
+                        const href = isDoc ? `/documents/${item.id}` : `/images/${item.id}`;
+                        // Use preview_medium from new ingest schema
+                        const imgSrc = item.preview_medium || item.preview_thumb;
+
                         return (
                             <div
                                 key={item.id}
@@ -116,45 +117,43 @@ export default function Home() {
                             >
                                 {/* Thumbnail / Preview */}
                                 <div className="aspect-square bg-gray-100 relative overflow-hidden">
-                                    {item.type === 'image' ? (
+                                    {imgSrc ? (
                                         <img
-                                            src={item.medium_url || item.thumbnail_url}
-                                            alt={item.title}
+                                            src={imgSrc}
+                                            alt={item.title || item.image_name}
                                             loading="lazy"
                                             className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-300"
                                         />
                                     ) : (
                                         <div className="flex items-center justify-center h-full text-gray-400">
-                                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
+                                            <span className="text-xs">No Preview</span>
                                         </div>
                                     )}
 
                                     {/* Overlay Type Badge */}
                                     <div className="absolute top-2 right-2">
-                                        <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium shadow-sm backdrop-blur-md bg-opacity-90 ${item.type === 'document'
-                                                ? 'bg-green-100/90 text-green-800'
-                                                : 'bg-blue-100/90 text-blue-800'
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium shadow-sm backdrop-blur-md bg-opacity-90 ${isDoc
+                                            ? 'bg-green-100/90 text-green-800'
+                                            : 'bg-blue-100/90 text-blue-800'
                                             }`}>
-                                            {item.type === 'document' ? 'DOC' : 'IMG'}
+                                            {isDoc ? 'DOC' : 'IMG'}
                                         </span>
                                     </div>
                                 </div>
 
                                 {/* Card Footer */}
                                 <div className="p-3">
-                                    <h3 className="text-sm font-medium text-gray-900 truncate" title={item.title}>
-                                        {item.title}
+                                    <h3 className="text-sm font-medium text-gray-900 truncate" title={item.title || item.image_name}>
+                                        {item.title || item.image_name}
                                     </h3>
                                     <p className="mt-1 text-xs text-gray-500 truncate">
-                                        {new Date(item.created_at?.seconds * 1000).toLocaleDateString()}
+                                        {item.ingested_at ? new Date(item.ingested_at.seconds * 1000).toLocaleDateString() : 'Unknown Date'}
                                     </p>
                                 </div>
 
                                 {/* Full Card Link */}
-                                <Link href={`/item/${item.id}`} className="absolute inset-0 focus:outline-none">
-                                    <span className="sr-only">View details for {item.title}</span>
+                                <Link href={href} className="absolute inset-0 focus:outline-none">
+                                    <span className="sr-only">View details</span>
                                 </Link>
                             </div>
                         );
@@ -172,12 +171,10 @@ export default function Home() {
                 {!loading && items.length === 0 && (
                     <div className="text-center py-20">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
+                            <span className="text-2xl">EMPTY</span>
                         </div>
                         <h3 className="text-lg font-medium text-gray-900">No items found</h3>
-                        <p className="mt-1 text-gray-500">Try adjusting your filters or checking back later.</p>
+                        <p className="mt-1 text-gray-500">Try checking back later.</p>
                     </div>
                 )}
             </div>

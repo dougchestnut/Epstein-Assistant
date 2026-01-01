@@ -6,6 +6,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    // Allow public read access to 'documents'
+    match /documents/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Allow public read access to 'images'
+    match /images/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
     
     // Default deny for everything else
     match /{document=**} {

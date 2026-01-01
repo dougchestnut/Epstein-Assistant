@@ -10,7 +10,7 @@ def load_inventory():
     try:
         if not os.path.exists(INVENTORY_FILE):
             return {}
-        with open(INVENTORY_FILE, 'r') as f:
+        with open(INVENTORY_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
         return {}
@@ -19,7 +19,7 @@ def update_item(url, data):
     inv = load_inventory()
     if url in inv:
         inv[url].update(data)
-        with open(INVENTORY_FILE, 'w') as f:
+        with open(INVENTORY_FILE, 'w', encoding='utf-8') as f:
             json.dump(inv, f, indent=2)
 
 
@@ -57,7 +57,7 @@ def extract_content(url, meta):
             full_text += page.get_text() + "\n"
         
         if full_text.strip():
-            with open(text_path, "w") as f:
+            with open(text_path, "w", encoding="utf-8") as f:
                 f.write(full_text)
                 
     # IMAGE EXTRACTION

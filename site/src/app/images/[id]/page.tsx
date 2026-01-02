@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { doc, getDoc, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import TextViewer from "@/components/TextViewer";
 
 export default function ImageDetail() {
     const { id } = useParams();
+    const router = useRouter();
     const [item, setItem] = useState<DocumentData | null>(null);
     const [parentDoc, setParentDoc] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -55,17 +57,20 @@ export default function ImageDetail() {
     if (!item) return (
         <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-zinc-400">
             <p className="mb-4">Image not found.</p>
-            <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline">Back to Browse</Link>
+            <button onClick={() => router.back()} className="text-emerald-400 hover:text-emerald-300 underline">Go Back</button>
         </div>
     );
+
+    const ocrUrl = item.ocr?.markdown_url || item.ocr?.text_url;
+    const ocrIsMd = !!item.ocr?.markdown_url;
 
     return (
         <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
             {/* Header */}
             <nav className="p-4 border-b border-zinc-900 bg-zinc-950/50 backdrop-blur fixed top-0 w-full z-10 flex items-center justify-between">
-                <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm">
+                <button onClick={() => router.back()} className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm">
                     <span>←</span> Back
-                </Link>
+                </button>
                 <div className="flex-1"></div>
                 {/* Parent Link in Header (Optional, but we have big one in sidebar) */}
             </nav>
@@ -116,7 +121,48 @@ export default function ImageDetail() {
 
                     <h2 className="text-xl font-bold mb-6 text-zinc-200 break-words">{item.image_name}</h2>
 
-                    <div className="space-y-6">
+                    <div className="space-y-8">
+                        {/* Analysis Data (New) */}
+                        {item.analysis && (
+                            <div className="p-4 bg-zinc-900/40 rounded border border-zinc-800 space-y-4">
+                                <h3 className="text-xs uppercase tracking-wider text-emerald-500 font-bold mb-2">AI Analysis</h3>
+
+                                {item.analysis.visual_description && (
+                                    <div>
+                                        <h4 className="text-xs text-zinc-500 mb-1">Visual Description</h4>
+                                        <p className="text-sm text-zinc-300 leading-relaxed">{item.analysis.visual_description}</p>
+                                    </div>
+                                )}
+
+                                {item.analysis.keywords && item.analysis.keywords.length > 0 && (
+                                    <div>
+                                        <h4 className="text-xs text-zinc-500 mb-1">Keywords</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {item.analysis.keywords.map((kw: string) => (
+                                                <span key={kw} className="bg-zinc-800 text-zinc-300 text-xs px-2 py-1 rounded">
+                                                    {kw}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* OCR Text Viewer (New) */}
+                        {ocrUrl && (
+                            <div>
+                                <h3 className="text-xs uppercase tracking-wider text-zinc-600 mb-2">Extracted Text</h3>
+                                <div className="max-h-60 overflow-y-auto rounded bg-zinc-900 border border-zinc-800 text-left">
+                                    <TextViewer
+                                        url={ocrUrl}
+                                        isMarkdown={ocrIsMd}
+                                        className="border-0 bg-transparent text-zinc-300 !p-3"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         <div>
                             <h3 className="text-xs uppercase tracking-wider text-zinc-600 mb-2">Original Context</h3>
                             <a href={item.unique_uri} target="_blank" className="text-blue-400 hover:underline break-all text-xs block">

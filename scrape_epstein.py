@@ -92,7 +92,7 @@ def scrape_page(page, url):
     visited_pages.add(url)
     
     print(f"Scraping page: {url}")
-    print(f"Scraping page: {url}")
+
     max_retries = 3
     for i in range(max_retries):
         try:

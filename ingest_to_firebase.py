@@ -11,6 +11,32 @@ CREDENTIALS_PATH = "serviceAccountKey.json"
 BUCKET_NAME = "epstein-file-browser.firebasestorage.app"
 COL_DOCUMENTS = "documents"
 COL_IMAGES = "images"
+STATE_FILE = "epstein_files/ingest_state.json"
+
+def load_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {"documents": {}, "images": {}}
+    return {"documents": {}, "images": {}}
+
+def save_state(state):
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save state: {e}")
+
+def get_max_mtime(paths):
+    max_mtime = 0
+    for p in paths:
+        if os.path.exists(p):
+            mtime = os.path.getmtime(p)
+            if mtime > max_mtime:
+                max_mtime = mtime
+    return max_mtime
 
 def initialize_firebase():
     if not os.path.exists(CREDENTIALS_PATH):
@@ -67,11 +93,15 @@ def parse_page_num(img_name):
         return int(match.group(1))
     return None
 
-def ingest_documents(db, inventory):
+def ingest_documents(db, inventory, state, force=False):
     print("\n--- Ingesting Documents ---")
     count = 0
+    skipped_count = 0
     batch = db.batch()
     batch_count = 0
+    
+    doc_state = state.get("documents", {})
+    pending_updates = {}
 
     for url, meta in inventory.items():
         local_path = meta.get("local_path")
@@ -103,6 +133,26 @@ def ingest_documents(db, inventory):
         # User said "upload their medium.avif and thumb.avif images".
         # So if they don't exist, we skip or mark as pending. Let's skip for now to keep it clean.
         if not os.path.exists(medium_path):
+            continue
+            
+        # Check freshness EARLY to skip uploads
+        # Relevant files for a document include:
+        # - The PDF itself (local_path)
+        # - The previews (medium, thumb)
+        # - The content/ocr text files
+        # - The info.json
+        
+        info_path = os.path.join(output_dir, "info.json")
+        
+        check_paths = [local_path, medium_path, thumb_path, info_path]
+        for name in ["content.txt", "content.md", "ocr.txt", "ocr.md"]:
+             check_paths.append(os.path.join(output_dir, name))
+             
+        current_mtime = get_max_mtime(check_paths)
+        last_mtime = doc_state.get(doc_id, 0)
+        
+        if not force and current_mtime <= last_mtime:
+            skipped_count += 1
             continue
 
         # Upload
@@ -140,14 +190,14 @@ def ingest_documents(db, inventory):
              continue
         
         # Doc Info Data
-        info_path = os.path.join(output_dir, "info.json")
+        # info_path defined above
         info_data = {}
         if os.path.exists(info_path):
             try:
                 with open(info_path, 'r') as f:
                     info_data = json.load(f)
             except: pass
-
+            
         # Data
         doc_data = {
             "title": meta.get("link_text") or file_stem,
@@ -168,22 +218,37 @@ def ingest_documents(db, inventory):
         batch_count += 1
         count += 1
         
+        # Track pending update
+        pending_updates[doc_id] = current_mtime
+        
         if batch_count >= 10:
             batch.commit()
             batch = db.batch()
             batch_count = 0
             print(f"Committed batch of documents.")
+            
+            doc_state.update(pending_updates)
+            pending_updates = {}
 
     if batch_count > 0:
         batch.commit()
+        doc_state.update(pending_updates)
+    
+    # Save state back to main dict (in memory mainly, but good practice)
+    state["documents"] = doc_state
         
-    print(f"Documents Ingested: {count}")
+    print(f"Documents Ingested: {count} (Skipped: {skipped_count})")
 
-def ingest_images(db, inventory):
+def ingest_images(db, inventory, state, force=False):
     print("\n--- Ingesting Extracted Photos ---")
     count = 0
+    skipped_count = 0
     batch = db.batch()
     batch_count = 0
+    
+    img_state = state.get("images", {})
+    
+    pending_updates = {}
     
     for url, meta in inventory.items():
         local_path = meta.get("local_path")
@@ -225,8 +290,24 @@ def ingest_images(db, inventory):
             # Found a photo! Upload previews.
             medium_path = os.path.join(img_dir, "medium.avif")
             thumb_path = os.path.join(img_dir, "thumb.avif")
+            analysis_path = os.path.join(img_dir, "analysis.json")
             
             if not os.path.exists(medium_path):
+                continue
+
+            # Check freshness EARLY
+            check_paths = [medium_path, thumb_path, analysis_path, eval_path]
+            for name in ["ocr.txt", "ocr.md"]:
+                 check_paths.append(os.path.join(img_dir, name))
+                 
+            current_mtime = get_max_mtime(check_paths)
+            
+            # Construct DB ID early for state check
+            db_id = f"{doc_id}_{img_name}"
+            last_mtime = img_state.get(db_id, 0)
+            
+            if not force and current_mtime <= last_mtime:
+                skipped_count += 1
                 continue
                 
             storage_path_m = f"v1/images/{doc_id}/{img_name}/medium.avif"
@@ -251,13 +332,13 @@ def ingest_images(db, inventory):
                          ocr_map[key] = url_f
 
             # Analysis Data
-            analysis_path = os.path.join(img_dir, "analysis.json")
+            # analysis_path defined above
             analysis_data = {}
             if os.path.exists(analysis_path):
                 try: 
                     with open(analysis_path, 'r') as f:
                         analysis_data = json.load(f)
-                except: pass
+                except: pass # analysis_data might be empty
             
             if not url_m or not url_t:
                  continue
@@ -268,7 +349,7 @@ def ingest_images(db, inventory):
             
             # Firestore Key (Must be valid path chars)
             # We use doc_id + img_name
-            db_id = f"{doc_id}_{img_name}"
+            # db_id = f"{doc_id}_{img_name}" # Moved up
             
             # Page Number
             page_num = parse_page_num(img_name)
@@ -293,20 +374,30 @@ def ingest_images(db, inventory):
             batch_count += 1
             count += 1
             
-        if batch_count >= 10:
-            batch.commit()
-            batch = db.batch()
-            batch_count = 0
-            print(f"Committed batch of images.")
+            # Track pending update
+            pending_updates[db_id] = current_mtime
+            
+            if batch_count >= 10:
+                batch.commit()
+                batch = db.batch()
+                batch_count = 0
+                print(f"Committed batch of images.")
+                
+                img_state.update(pending_updates)
+                pending_updates = {}
 
     if batch_count > 0:
         batch.commit()
+        img_state.update(pending_updates)
+        
+    state["images"] = img_state
 
-    print(f"Images Ingested: {count}")
+    print(f"Images Ingested: {count} (Skipped: {skipped_count})")
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest extracted data to Firebase.")
     parser.add_argument("--only", choices=["documents", "images"], help="Ingest only specific entity type.")
+    parser.add_argument("--force", action="store_true", help="Force re-ingestion of all files, ignoring state.")
     args = parser.parse_args()
 
     db = initialize_firebase()
@@ -321,11 +412,16 @@ def main():
     with open(inv_path, 'r') as f:
         inventory = json.load(f)
         
-    if not args.only or args.only == 'documents':
-        ingest_documents(db, inventory)
+    state = load_state()
         
-    if not args.only or args.only == 'images':
-        ingest_images(db, inventory)
+    try:
+        if not args.only or args.only == 'documents':
+            ingest_documents(db, inventory, state, args.force)
+            
+        if not args.only or args.only == 'images':
+            ingest_images(db, inventory, state, args.force)
+    finally:
+        save_state(state)
 
 if __name__ == "__main__":
     main()

@@ -107,6 +107,18 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
 
 
 
+10. **Detect Faces**
+    ```bash
+    python detect_faces.py [--overwrite]
+    ```
+    Scans all images in the inventory for faces using `insightface`.
+    *   **Features:**
+        *   Detects bounding boxes, landmarks, and extracts embeddings for facial recognition/clustering.
+        *   Saves results to `faces.json` in the image's directory.
+        *   Ignores `has_faces` flag from analysis (processes everything) for maximum coverage.
+    *   **Requirements:**
+        *   `insightface` and `onnxruntime` installed (included in requirements.txt).
+
 ### Output Structure
 The `epstein_files/` directory is organized by document ID. After running all steps, a typical directory looks like:
 

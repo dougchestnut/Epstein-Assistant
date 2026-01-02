@@ -73,8 +73,9 @@ def process_image_directory(target_dir, app, overwrite=False):
         with open(analysis_path, 'r') as f:
             analysis = json.load(f)
             
-        if not analysis.get("has_faces", False):
-            return # Skip if no faces reported
+        # if not analysis.get("has_faces", False):
+        #    return # Skip if no faces reported
+        pass
             
     except Exception as e:
         logging.error(f"Error reading analysis.json in {target_dir}: {e}")

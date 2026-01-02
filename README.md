@@ -55,7 +55,14 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
         *   `--overwrite`: Force regeneration of existing files (useful for applying new quality settings).
         *   `--just`: Limit scope to `documents` (PDFs only) or `extracted` (Images only).
 
-6.  **Image Analysis**
+6.  **Extract Metadata**
+    ```bash
+    python extract_metadata.py
+    ```
+    Extracts embedded EXIF and XMP metadata from all images in the inventory.
+    *   **Output**: Creates a `meta.json` file in the image's directory containing the raw metadata.
+
+7.  **Image Analysis**
     ```bash
     python analyze_images.py [--overwrite]
     ```
@@ -64,7 +71,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     **Requirements:**
     *   Vision-capable model loaded (e.g., `mistralai/ministral-3-3b` or `llava`).
 
-7.  **Perform OCR**
+8.  **Perform OCR**
     ```bash
     python perform_ocr.py [--dry-run]
     ```
@@ -80,7 +87,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     *   **LM Studio** running on `http://localhost:1234` (or configured URL).
     *   An OCR-capable model loaded (recommended: `allenai/olmocr-2-7b`).
 
-8.  **Perform PDF OCR**
+9.  **Perform PDF OCR**
     ```bash
     python perform_pdf_ocr.py [--dry-run] [--overwrite]
     ```
@@ -91,7 +98,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
         *   Aggregates pages into a single `ocr.md` markdown file.
     *   **Requirements**: Same as Image OCR (LM Studio + Vision Model).
 
-9.  **Transcribe Media**
+10. **Transcribe Media**
     ```bash
     python transcribe_media.py [--model large-v2] [--device cpu|cuda]
     ```
@@ -107,7 +114,7 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
 
 
 
-10. **Detect Faces**
+11. **Detect Faces**
     ```bash
     python detect_faces.py [--overwrite]
     ```
@@ -131,6 +138,7 @@ epstein_files/
 │       ├── page1_img1.jpg       # Original extracted image
 │       └── page1_img1/          # Analysis & Formats Directory
 │           ├── analysis.json    # AI Analysis (Type, Description, Objects)
+│           ├── meta.json        # EXIF/XMP Metadata
 │           ├── ocr.txt          # OCR text (if text was detected)
 │           ├── full.avif        # Web-optimized full resolution
 │           ├── medium.avif      # Medium sized thumbnail

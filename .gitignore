@@ -2,3 +2,10 @@
 epstein_files
 serviceAccountKey.json
 node_modules
+.insightface/models/buffalo_l.zip
+.insightface/models/buffalo_l/1k3d68.onnx
+.insightface/models/buffalo_l/2d106det.onnx
+.gitignore
+.insightface/models/buffalo_l/det_10g.onnx
+.insightface/models/buffalo_l/genderage.onnx
+.insightface/models/buffalo_l/w600k_r50.onnx

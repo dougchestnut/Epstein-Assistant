@@ -59,8 +59,9 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     ```bash
     python extract_metadata.py
     ```
-    Extracts embedded EXIF and XMP metadata from all images in the inventory.
-    *   **Output**: Creates a `meta.json` file in the image's directory containing the raw metadata.
+    Extracts embedded EXIF and XMP metadata from all images and PDFs in the inventory.
+    *   **Output**: Creates a `meta.json` file in the image's or document's directory containing the raw metadata.
+    *   **PDF Support**: Extracts XMP, Standard Info, Layers (OCGs), Fonts, Embedded Files, and Annotation summaries.
 
 7.  **Image Analysis**
     ```bash

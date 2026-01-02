@@ -42,6 +42,8 @@ def analyze_image(image_path):
             "- \"needs_ocr\": boolean (true if significant text is visible that needs extraction)\n"
             "- \"is_empty\": boolean (true if the image is blank, solid color, or noise)\n"
             "- \"is_photo\": boolean (true if the image is a photograph of people/places, NOT a scanned document)\n"
+            "- \"is_blacked_out\": boolean (true if the image is significantly redacted or blacked out)\n"
+            "- \"inappropriate\": boolean (true if the image depicts inappropriate content, specifically older individuals interacting with children)\n"
             "- \"description\": string (a detailed visual description of the content)\n"
             "\nExample Output:\n"
             "{\n"
@@ -51,6 +53,8 @@ def analyze_image(image_path):
             "  \"needs_ocr\": true,\n"
             "  \"is_empty\": false,\n"
             "  \"is_photo\": false,\n"
+            "  \"is_blacked_out\": false,\n"
+            "  \"inappropriate\": false,\n"
             "  \"description\": \"A scanned letter with handwritten signatures.\"\n"
             "}"
         )

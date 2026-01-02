@@ -62,24 +62,24 @@ def process_image_directory(target_dir, app, overwrite=False):
     Process a single image directory.
     Expects analysis.json to exist in this directory.
     """
-    analysis_path = os.path.join(target_dir, "analysis.json")
+    # analysis_path = os.path.join(target_dir, "analysis.json")
     faces_path = os.path.join(target_dir, "faces.json")
     
-    if not os.path.exists(analysis_path):
-        return
+    # if not os.path.exists(analysis_path):
+    #     return
 
     # Check if we should process
-    try:
-        with open(analysis_path, 'r') as f:
-            analysis = json.load(f)
+    # try:
+    #     with open(analysis_path, 'r') as f:
+    #         analysis = json.load(f)
             
         # if not analysis.get("has_faces", False):
         #    return # Skip if no faces reported
-        pass
+    #     pass
             
-    except Exception as e:
-        logging.error(f"Error reading analysis.json in {target_dir}: {e}")
-        return
+    # except Exception as e:
+    #     logging.error(f"Error reading analysis.json in {target_dir}: {e}")
+    #     return
 
     # Check if already processed
     if os.path.exists(faces_path) and not overwrite:
@@ -145,6 +145,7 @@ def process_image_directory(target_dir, app, overwrite=False):
 def main():
     parser = argparse.ArgumentParser(description="Detect faces in images marked as containing faces.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing faces.json files")
+    parser.add_argument("--det-size", type=int, default=1280, help="Detection size (square input, default 1280)")
     args = parser.parse_args()
 
     # Initialize InsightFace
@@ -152,7 +153,7 @@ def main():
     # using 'buffalo_l' as a good default
     try:
         app = FaceAnalysis(name='buffalo_l', root='.insightface') 
-        app.prepare(ctx_id=0, det_size=(640, 640)) # ctx_id=0 for GPU, -1 for CPU. Fallback to -1 if no GPU?
+        app.prepare(ctx_id=0, det_size=(args.det_size, args.det_size)) # ctx_id=0 for GPU, -1 for CPU. Fallback to -1 if no GPU?
         # Actually, let's try to detect if we can use GPU or auto?
         # InsightFace usually fails if we pass 0 and no GPU.
         # Safest for this environment (likely CPU mostly unless user has specific setup) might be -1?
@@ -164,11 +165,11 @@ def main():
     except Exception:
         # Retry with CPU
         app = FaceAnalysis(name='buffalo_l', root='.insightface', providers=['CPUExecutionProvider'])
-        app.prepare(ctx_id=-1, det_size=(640, 640))
+        app.prepare(ctx_id=-1, det_size=(args.det_size, args.det_size))
         
     # Re-init strictly for CPU to be safe for this script's stability
     app = FaceAnalysis(name='buffalo_l', root='.insightface', providers=['CPUExecutionProvider'])
-    app.prepare(ctx_id=-1, det_size=(640, 640))
+    app.prepare(ctx_id=-1, det_size=(args.det_size, args.det_size))
 
     inventory = load_inventory()
     

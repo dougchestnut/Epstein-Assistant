@@ -13,16 +13,20 @@
           "order": "ASCENDING"
         }
       ]
-    }
-  ],
-  "fieldOverrides": [
+    },
     {
       "collectionGroup": "faces",
-      "fieldPath": "embedding",
-      "vectorConfig": {
-        "dimension": 512,
-        "flat": {}
-      }
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "embedding",
+          "vectorConfig": {
+            "dimension": 512,
+            "flat": {}
+          }
+        }
+      ]
     }
-  ]
+  ],
+  "fieldOverrides": []
 }

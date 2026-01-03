@@ -54,12 +54,19 @@ export async function findSimilarFaces(faceId: string) {
 
         const snapshot = await vectorQuery.get();
 
-        const results = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            // Remove embedding from response to save bandwidth if not needed
-            embedding: undefined
-        }));
+        const results = snapshot.docs.map(doc => {
+            const data = doc.data();
+            // Serialize Timestamp to string and remove embedding (Vector object)
+            const { embedding, ingested_at, ...rest } = data;
+
+            return {
+                id: doc.id,
+                ...rest,
+                ingested_at: (ingested_at && typeof ingested_at.toDate === 'function')
+                    ? ingested_at.toDate().toISOString()
+                    : ingested_at,
+            };
+        });
 
         // Filter out the query face itself
         const filtered = results.filter(f => f.id !== faceId);

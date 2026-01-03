@@ -294,8 +294,9 @@ def ingest_images(db, inventory, state, force=False):
             try:
                 with open(eval_path, 'r') as f:
                     eval_data = json.load(f)
-                    if not eval_data.get("is_likely_photo"):
-                        continue
+                    # We accept all analyzed images now, regardless of photo score
+                    # if not eval_data.get("is_likely_photo"):
+                    #     continue
             except:
                 continue
 

@@ -475,6 +475,12 @@ def ingest_faces(db, inventory, state, force=False):
                 embedding = face.get("embedding")
                 if not embedding:
                     continue
+
+                # Fix nested arrays for Firestore (kps is [[x,y], ...])
+                kps = face.get("kps")
+                if kps and isinstance(kps, list):
+                    # Convert to list of objects: [{'x': 1, 'y': 2}, ...]
+                    kps = [{'x': p[0], 'y': p[1]} for p in kps if len(p) >= 2]
                     
                 # Store
                 face_doc = {
@@ -482,7 +488,7 @@ def ingest_faces(db, inventory, state, force=False):
                     "parent_doc_id": doc_id,
                     "bbox": face.get("bbox"), # [x1, y1, x2, y2]
                     "det_score": face.get("det_score"),
-                    "kps": face.get("kps"),
+                    "kps": kps,
                     "embedding": Vector(embedding), # Create Vector object
                     "image_name": img_name,
                     "doc_title": meta.get("link_text") or file_stem,

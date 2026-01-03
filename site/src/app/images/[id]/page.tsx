@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { doc, getDoc, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import TextViewer from "@/components/TextViewer";
+import FaceOverlay from "@/components/FaceOverlay";
 
 export default function ImageDetail() {
     const { id } = useParams();
@@ -13,6 +14,7 @@ export default function ImageDetail() {
     const [item, setItem] = useState<DocumentData | null>(null);
     const [parentDoc, setParentDoc] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
+    const imgRef = useRef<HTMLImageElement>(null);
 
     useEffect(() => {
         if (!id) return;
@@ -87,11 +89,15 @@ export default function ImageDetail() {
                         />
                     </div>
 
-                    <img
-                        src={item.preview_medium || item.preview_thumb}
-                        alt={item.image_name}
-                        className="max-h-[85vh] max-w-full object-contain shadow-2xl relative z-10 rounded-sm"
-                    />
+                    <div className="relative inline-block">
+                        <img
+                            ref={imgRef}
+                            src={item.preview_medium || item.preview_thumb}
+                            alt={item.image_name}
+                            className="max-h-[85vh] max-w-full object-contain shadow-2xl relative z-10 rounded-sm"
+                        />
+                        <FaceOverlay imageId={id as string} imgRef={imgRef} />
+                    </div>
                 </div>
 
                 {/* Sidebar Info */}

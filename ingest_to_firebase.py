@@ -254,7 +254,8 @@ def ingest_documents(db, inventory, state, force=False):
         
     print(f"Documents Ingested: {count} (Skipped: {skipped_count})")
 
-def ingest_images(db, inventory, state, force=False):
+def ingest_images(db, inventory, state, args=None):
+    force = args.force if args else False
     print("\n--- Ingesting Extracted Photos ---")
     count = 0
     skipped_count = 0
@@ -271,6 +272,14 @@ def ingest_images(db, inventory, state, force=False):
             continue
             
         file_stem = os.path.splitext(os.path.basename(local_path))[0]
+        doc_id = meta.get("id") or file_stem
+
+        if hasattr(args, 'doc') and args.doc:
+            target_docs = args.doc.split(',')
+            # Normalize to strings just in case
+            target_docs = [str(x).strip() for x in target_docs]
+            if str(doc_id) not in target_docs and str(file_stem) not in target_docs:
+                continue
         file_dir = os.path.dirname(local_path)
         
         # Extracted images are in: epstein_files/DOCID/images/IMGNAME/...
@@ -527,6 +536,7 @@ def ingest_faces(db, inventory, state, force=False):
 def main():
     parser = argparse.ArgumentParser(description="Ingest extracted data to Firebase.")
     parser.add_argument("--only", choices=["documents", "images", "faces"], help="Ingest only specific entity type.")
+    parser.add_argument("--doc", help="Ingest only a specific document ID (or comma-separated list).")
     parser.add_argument("--force", action="store_true", help="Force re-ingestion of all files, ignoring state.")
     args = parser.parse_args()
 
@@ -549,7 +559,7 @@ def main():
             ingest_documents(db, inventory, state, args.force)
             
         if not args.only or args.only == 'images':
-            ingest_images(db, inventory, state, args.force)
+            ingest_images(db, inventory, state, args)
 
         if not args.only or args.only == 'faces':
             ingest_faces(db, inventory, state, args.force)

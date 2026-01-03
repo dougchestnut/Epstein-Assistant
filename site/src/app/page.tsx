@@ -52,6 +52,12 @@ export default function Home() {
                                 {type.charAt(0).toUpperCase() + type.slice(1)}s
                             </button>
                         ))}
+                        <Link
+                            href="/faces"
+                            className="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                            Faces
+                        </Link>
                     </div>
                 </div>
 

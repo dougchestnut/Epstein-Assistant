@@ -1,27 +1,15 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access to the 'items' collection
-    match /items/{document=**} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // Allow public read access to 'documents'
-    match /documents/{document=**} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // Allow public read access to 'images'
     match /images/{document=**} {
-      allow read: if true;
-      allow write: if false;
+      allow read, write: if true;
     }
-    
-    // Default deny for everything else
-    match /{document=**} {
-      allow read, write: if false;
+    match /documents/{document=**} {
+      allow read, write: if true;
+    }
+    match /faces/{document=**} {
+      allow read: if true;
+      allow write: if true; // Or restrict to admin/script
     }
   }
 }

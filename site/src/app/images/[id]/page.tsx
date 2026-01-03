@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { doc, getDoc, DocumentData } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import TextViewer from "@/components/TextViewer";
 import FaceOverlay from "@/components/FaceOverlay";
+import FaceCard from "@/components/FaceCard";
 
 export default function ImageDetail() {
     const { id } = useParams();
     const router = useRouter();
     const [item, setItem] = useState<DocumentData | null>(null);
     const [parentDoc, setParentDoc] = useState<DocumentData | null>(null);
+    const [faces, setFaces] = useState<DocumentData[]>([]);
+    const [hoveredFaceId, setHoveredFaceId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const imgRef = useRef<HTMLImageElement>(null);
 
@@ -39,6 +42,16 @@ export default function ImageDetail() {
                         } catch (e) {
                             console.error("Error fetching parent doc:", e);
                         }
+                    }
+
+                    // Fetch Faces
+                    try {
+                        const q = query(collection(db, "faces"), where("parent_image_id", "==", id));
+                        const faceSnap = await getDocs(q);
+                        const facesList = faceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setFaces(facesList);
+                    } catch (e) {
+                        console.error("Error fetching faces:", e);
                     }
                 }
             } catch (err) {
@@ -96,7 +109,13 @@ export default function ImageDetail() {
                             alt={item.image_name}
                             className="max-h-[85vh] max-w-full object-contain shadow-2xl relative z-10 rounded-sm"
                         />
-                        <FaceOverlay imageId={id as string} imgRef={imgRef} />
+                        <FaceOverlay
+                            imageId={id as string}
+                            imgRef={imgRef}
+                            faces={faces}
+                            hoveredFaceId={hoveredFaceId}
+                            onHover={setHoveredFaceId}
+                        />
                     </div>
                 </div>
 
@@ -128,6 +147,28 @@ export default function ImageDetail() {
                     <h2 className="text-xl font-bold mb-6 text-zinc-200 break-words">{item.image_name}</h2>
 
                     <div className="space-y-8">
+                        {/* Found Faces Section */}
+                        {faces.length > 0 && (
+                            <div className="p-4 bg-zinc-900/40 rounded border border-zinc-800 space-y-4">
+                                <h3 className="text-xs uppercase tracking-wider text-emerald-500 font-bold mb-2">Found Faces ({faces.length})</h3>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {faces.map(face => (
+                                        <div
+                                            key={face.id}
+                                            className={`transition-opacity ${hoveredFaceId && hoveredFaceId !== face.id ? 'opacity-50' : 'opacity-100'}`}
+                                        >
+                                            <FaceCard
+                                                face={face}
+                                                imageUrl={item.preview_medium || item.preview_thumb}
+                                                onMouseEnter={() => setHoveredFaceId(face.id)}
+                                                onMouseLeave={() => setHoveredFaceId(null)}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Analysis Data (New) */}
                         {item.analysis && (
                             <div className="p-4 bg-zinc-900/40 rounded border border-zinc-800 space-y-4">

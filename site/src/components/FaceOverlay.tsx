@@ -8,29 +8,18 @@ import Link from "next/link";
 interface FaceOverlayProps {
     imageId: string;
     imgRef: RefObject<HTMLImageElement | null>;
+    faces: DocumentData[];
+    hoveredFaceId?: string | null;
+    onHover?: (id: string | null) => void;
 }
 
-export default function FaceOverlay({ imageId, imgRef }: FaceOverlayProps) {
-    const [faces, setFaces] = useState<DocumentData[]>([]);
+export default function FaceOverlay({ imageId, imgRef, faces, hoveredFaceId, onHover }: FaceOverlayProps) {
     const [scale, setScale] = useState({ x: 1, y: 1 });
     const [dims, setDims] = useState({ width: 0, height: 0, top: 0, left: 0 });
     const [loaded, setLoaded] = useState(false);
 
-    // Fetch faces
-    useEffect(() => {
-        if (!imageId) return;
-        const fetchFaces = async () => {
-            try {
-                const q = query(collection(db, "faces"), where("parent_image_id", "==", imageId));
-                const snap = await getDocs(q);
-                const facesList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                setFaces(facesList);
-            } catch (e) {
-                console.error("Error loading faces:", e);
-            }
-        };
-        fetchFaces();
-    }, [imageId]);
+    // Fetching removed, receiving faces via props
+
 
     // Handle resizing and scaling
     useEffect(() => {
@@ -105,11 +94,16 @@ export default function FaceOverlay({ imageId, imgRef }: FaceOverlayProps) {
                     height: (y2 - y1) * scale.y,
                 };
 
+                const isHovered = hoveredFaceId === face.id;
+
                 return (
                     <Link
                         key={face.id}
                         href={`/faces/${face.id}`}
-                        className="absolute border-2 border-emerald-400/70 hover:border-emerald-400 hover:bg-emerald-400/10 transition-colors cursor-pointer pointer-events-auto group"
+                        className={`absolute border-2 transition-colors cursor-pointer pointer-events-auto group ${isHovered
+                                ? "border-emerald-300 bg-emerald-400/30 z-20"
+                                : "border-emerald-400/70 hover:border-emerald-400 hover:bg-emerald-400/10 z-10"
+                            }`}
                         style={{
                             left: `${boxStyle.left}px`,
                             top: `${boxStyle.top}px`,
@@ -117,6 +111,8 @@ export default function FaceOverlay({ imageId, imgRef }: FaceOverlayProps) {
                             height: `${boxStyle.height}px`,
                         }}
                         title={`Face ${face.id} (Score: ${face.det_score?.toFixed(2)})`}
+                        onMouseEnter={() => onHover?.(face.id)}
+                        onMouseLeave={() => onHover?.(null)}
                     >
                         {/* Optional: Show score or details on hover */}
                         {/* <div className="absolute -top-6 left-0 bg-black/70 text-white text-[10px] px-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap">

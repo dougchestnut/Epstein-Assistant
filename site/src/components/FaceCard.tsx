@@ -5,32 +5,39 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
 
+// ... imports
 interface FaceCardProps {
     face: any;
+    imageUrl?: string | null;
+    onMouseEnter?: () => void;
+    onMouseLeave?: () => void;
 }
 
-export default function FaceCard({ face }: FaceCardProps) {
-    const [imageUrl, setImageUrl] = useState<string | null>(null);
+export default function FaceCard({ face, imageUrl: providedImageUrl, onMouseEnter, onMouseLeave }: FaceCardProps) {
+    const [fetchedImageUrl, setFetchedImageUrl] = useState<string | null>(null);
+    const imageUrl = providedImageUrl ?? fetchedImageUrl;
     const [style, setStyle] = useState<React.CSSProperties>({ opacity: 0 });
     const imgRef = useRef<HTMLImageElement>(null);
+    // ...
 
     useEffect(() => {
+        if (providedImageUrl) return;
+
         const fetchImage = async () => {
             if (!face.parent_image_id) return;
-            // Try to use a cache or context in real app, but fetching here for MVP
             try {
                 const docRef = doc(db, "images", face.parent_image_id);
                 const snap = await getDoc(docRef);
                 if (snap.exists()) {
                     const data = snap.data();
-                    setImageUrl(data.preview_medium || data.preview_thumb);
+                    setFetchedImageUrl(data.preview_medium || data.preview_thumb);
                 }
             } catch (e) {
                 console.error(e);
             }
         };
         fetchImage();
-    }, [face.parent_image_id]);
+    }, [face.parent_image_id, providedImageUrl]);
 
     const handleLoad = () => {
         const img = imgRef.current;
@@ -122,6 +129,8 @@ export default function FaceCard({ face }: FaceCardProps) {
         <Link
             href={`/faces/${face.id}`}
             className="block aspect-square bg-zinc-900 rounded-lg overflow-hidden relative group border border-zinc-800 hover:border-emerald-500 transition-colors"
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
         >
             {imageUrl && (
                 <div className="w-full h-full relative overflow-hidden">

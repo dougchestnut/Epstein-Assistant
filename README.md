@@ -127,6 +127,25 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
     *   **Requirements:**
         *   `insightface` and `onnxruntime` installed (included in requirements.txt).
 
+12. **Ingest to Firebase**
+    ```bash
+    python ingest_to_firebase.py [--only documents|images|faces] [--force]
+    ```
+    Populates a Firestore database with the processed data.
+    *   **Documents**: Uploads PDF previews and metadata to the `documents` collection.
+    *   **Images**: Uploads extracted photo previews and metadata to the `images` collection.
+    *   **Faces**: **NEW!** Ingests detected faces and vector embeddings to the `faces` collection.
+        *   **Vector Search**: Uses Firestore Vector Search. You must create the index first:
+            ```bash
+            gcloud firestore indexes composite create \
+            --collection-group=faces \
+            --query-scope=COLLECTION \
+            --field-config field-path=embedding,vector-config='{"dimension":"512", "flat": "{}"}' \
+            --database="(default)" \
+            --project=epstein-file-browser
+            ```
+            (Note: Dimension is 512 for the default `buffalo_l` model).
+
 ### Output Structure
 The `epstein_files/` directory is organized by document ID. After running all steps, a typical directory looks like:
 

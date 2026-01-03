@@ -11,16 +11,27 @@ CREDENTIALS_PATH = "serviceAccountKey.json"
 BUCKET_NAME = "epstein-file-browser.firebasestorage.app"
 COL_DOCUMENTS = "documents"
 COL_IMAGES = "images"
+COL_FACES = "faces"
 STATE_FILE = "epstein_files/ingest_state.json"
+
+# Import Vector for Firestore
+try:
+    from google.cloud.firestore_v1.vector import Vector
+except ImportError:
+    print("Warning: Could not import Vector from google.cloud.firestore_v1.vector. Vector search ingestion will fail.")
+    Vector = None
 
 def load_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, 'r') as f:
-                return json.load(f)
+                state = json.load(f)
+                if "faces" not in state:
+                    state["faces"] = {}
+                return state
         except:
-            return {"documents": {}, "images": {}}
-    return {"documents": {}, "images": {}}
+            return {"documents": {}, "images": {}, "faces": {}}
+    return {"documents": {}, "images": {}, "faces": {}}
 
 def save_state(state):
     try:
@@ -45,11 +56,15 @@ def initialize_firebase():
     
     cred = credentials.Certificate(CREDENTIALS_PATH)
     try:
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': BUCKET_NAME
-        })
+        try:
+            app = firebase_admin.get_app()
+        except ValueError:
+            app = firebase_admin.initialize_app(cred, {
+                'storageBucket': BUCKET_NAME
+            })
         return firestore.client()
     except ValueError:
+        # Fallback if app is already init but client fails? Should not happen with get_app check
         return firestore.client()
 
 def upload_file_to_storage(local_path, destination_path, content_type=None):
@@ -264,9 +279,6 @@ def ingest_images(db, inventory, state, force=False):
         if not os.path.exists(images_root):
             continue
             
-        if not os.path.exists(images_root):
-            continue
-            
         doc_id = meta.get("id") or file_stem
         
         for img_name in os.listdir(images_root):
@@ -347,10 +359,6 @@ def ingest_images(db, inventory, state, force=False):
             # "https://.../001.pdf#page11_img1"
             unique_uri = f"{url}#{img_name}"
             
-            # Firestore Key (Must be valid path chars)
-            # We use doc_id + img_name
-            # db_id = f"{doc_id}_{img_name}" # Moved up
-            
             # Page Number
             page_num = parse_page_num(img_name)
             
@@ -394,9 +402,124 @@ def ingest_images(db, inventory, state, force=False):
 
     print(f"Images Ingested: {count} (Skipped: {skipped_count})")
 
+def ingest_faces(db, inventory, state, force=False):
+    if not Vector:
+        print("\n--- Ingesting Faces (SKIPPED due to missing Vector class) ---")
+        return
+
+    print("\n--- Ingesting Faces ---")
+    count = 0
+    skipped_count = 0
+    batch = db.batch()
+    batch_count = 0
+    
+    face_state = state.get("faces", {})
+    pending_updates = {}
+
+    # Iterate through extracted images logic again to find faces.json
+    for url, meta in inventory.items():
+        local_path = meta.get("local_path")
+        if not local_path or not local_path.lower().endswith('.pdf'):
+            continue
+            
+        file_stem = os.path.splitext(os.path.basename(local_path))[0]
+        file_dir = os.path.dirname(local_path)
+        images_root = os.path.join(file_dir, file_stem, "images")
+        
+        if not os.path.exists(images_root):
+             continue
+             
+        doc_id = meta.get("id") or file_stem
+        
+        for img_name in os.listdir(images_root):
+            img_dir = os.path.join(images_root, img_name)
+            if not os.path.isdir(img_dir):
+                continue
+                
+            faces_path = os.path.join(img_dir, "faces.json")
+            if not os.path.exists(faces_path):
+                continue
+                
+            current_mtime = os.path.getmtime(faces_path)
+            
+            # Using doc_id + img_name to track freshness of faces.json processing
+            # This is slightly simplified (if faces.json changes, we re-ingest all faces for that image)
+            sync_key = f"{doc_id}_{img_name}"
+            last_mtime = face_state.get(sync_key, 0)
+            
+            if not force and current_mtime <= last_mtime:
+                # We count skipped faces? Or skipped images?
+                # Let's just track we skipped this file
+                skipped_count += 1
+                continue
+            
+            try:
+                with open(faces_path, 'r') as f:
+                    faces_data = json.load(f)
+            except Exception as e:
+                print(f"Error reading {faces_path}: {e}")
+                continue
+                
+            if not faces_data:
+                continue
+                
+            # We found faces to ingest.
+            # Parent Image Reference
+            image_db_id = f"{doc_id}_{img_name}"
+            
+            for i, face in enumerate(faces_data):
+                # Face ID: {doc_id}_{img_name}_{i}
+                face_id = f"{image_db_id}_{i}"
+                
+                # Check for embedding
+                embedding = face.get("embedding")
+                if not embedding:
+                    continue
+                    
+                # Store
+                face_doc = {
+                    "parent_image_id": image_db_id,
+                    "parent_doc_id": doc_id,
+                    "bbox": face.get("bbox"), # [x1, y1, x2, y2]
+                    "det_score": face.get("det_score"),
+                    "kps": face.get("kps"),
+                    "embedding": Vector(embedding), # Create Vector object
+                    "image_name": img_name,
+                    "doc_title": meta.get("link_text") or file_stem,
+                    "page_num": parse_page_num(img_name),
+                    "ingested_at": firestore.SERVER_TIMESTAMP
+                }
+                
+                ref = db.collection(COL_FACES).document(face_id)
+                batch.set(ref, face_doc, merge=True)
+                batch_count += 1
+                count += 1
+                
+                if batch_count >= 10:
+                    batch.commit()
+                    batch = db.batch()
+                    batch_count = 0
+            
+            # Track as updated
+            pending_updates[sync_key] = current_mtime
+            
+            if batch_count >= 10: # Check again after loop
+                 batch.commit()
+                 batch = db.batch()
+                 batch_count = 0
+                 
+    if batch_count > 0:
+        batch.commit()
+    
+    face_state.update(pending_updates)
+    state["faces"] = face_state
+    
+    print(f"Faces Ingested: {count} (from {len(pending_updates)} images, Skipped {skipped_count} images)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Ingest extracted data to Firebase.")
-    parser.add_argument("--only", choices=["documents", "images"], help="Ingest only specific entity type.")
+    parser.add_argument("--only", choices=["documents", "images", "faces"], help="Ingest only specific entity type.")
     parser.add_argument("--force", action="store_true", help="Force re-ingestion of all files, ignoring state.")
     args = parser.parse_args()
 
@@ -420,6 +543,10 @@ def main():
             
         if not args.only or args.only == 'images':
             ingest_images(db, inventory, state, args.force)
+
+        if not args.only or args.only == 'faces':
+            ingest_faces(db, inventory, state, args.force)
+            
     finally:
         save_state(state)
 

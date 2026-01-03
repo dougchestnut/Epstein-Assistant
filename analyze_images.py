@@ -43,6 +43,7 @@ def analyze_image(image_path):
             "- \"is_photo\": boolean (true if the image is a photograph of people/places, NOT a scanned document)\n"
             "- \"is_blacked_out\": boolean (true if the image is significantly redacted or blacked out)\n"
             "- \"inappropriate\": boolean (true if the image depicts inappropriate content, specifically older individuals interacting with children)\n"
+            "- \"rotation_correction\": integer (0, 90, 180, or 270 - degrees to rotate CLOCKWISE to correct orientation)\n"
             "- \"description\": string (a detailed visual description of the content)\n"
             "\nExample Output:\n"
             "{\n"
@@ -53,6 +54,7 @@ def analyze_image(image_path):
             "  \"is_photo\": false,\n"
             "  \"is_blacked_out\": false,\n"
             "  \"inappropriate\": false,\n"
+            "  \"rotation_correction\": 0,\n"
             "  \"description\": \"A scanned letter with handwritten signatures.\"\n"
             "}"
         )

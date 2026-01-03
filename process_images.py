@@ -49,6 +49,25 @@ def create_derivatives(file_path, overwrite=False):
             # Pillow's AVIF encoder supports RGBA.
             
             os.makedirs(output_dir, exist_ok=True)
+
+            # Check for analysis.json to prompt rotation
+            analysis_path = os.path.join(output_dir, "analysis.json")
+            if os.path.exists(analysis_path):
+                try:
+                    with open(analysis_path, 'r') as f:
+                        analysis = json.load(f)
+                        rotation = analysis.get("rotation_correction", 0)
+                        
+                        if rotation in [90, 180, 270]:
+                            print(f"Applying rotation {rotation}° CW to {file_name}", flush=True)
+                            if rotation == 90:
+                                img = img.transpose(Image.Transpose.ROTATE_270) # 90 CW = 270 CCW
+                            elif rotation == 180:
+                                img = img.transpose(Image.Transpose.ROTATE_180)
+                            elif rotation == 270:
+                                img = img.transpose(Image.Transpose.ROTATE_90) # 270 CW = 90 CCW
+                except Exception as e:
+                    print(f"Error reading rotation from analysis: {e}")
             
             # 1. Save Full (Optimized AVIF)
             # 1. Save Full (Optimized AVIF)

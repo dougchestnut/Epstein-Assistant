@@ -169,4 +169,33 @@ epstein_files/
 ...
 ```
 
-*   **`epstein_files/inventory.json`**: The source of truth database tracking every file's URL, download status, classification, and analysis progress.
+## Web Application
+
+The project includes a modern [Next.js](https://nextjs.org/) web application to browse and search the ingested documents.
+
+### Prerequisites
+
+*   **Node.js**: Install Node.js (v18 or newer recommended).
+
+### Setup
+
+1.  **Navigate to the site directory**
+    ```bash
+    cd site
+    ```
+
+2.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
+
+3.  **Run Development Server**
+    ```bash
+    npm run dev
+    ```
+    The site will be available at `http://localhost:3000`.
+
+### Features
+*   **Document Browser**: Filter by extracted entities, dates, or search text (using Firestore).
+*   **Vector Search**: (Planned) Search for faces or semantic concepts.
+*   **Viewer**: Markdown-rendered content and high-quality deep-zoom images.

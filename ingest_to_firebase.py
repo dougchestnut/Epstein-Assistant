@@ -5,6 +5,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore, storage
 import argparse
 import mimetypes
+from PIL import Image
 
 # Configuration
 CREDENTIALS_PATH = "serviceAccountKey.json"
@@ -427,7 +428,10 @@ def ingest_faces(db, inventory, state, force=False):
     pending_updates = {}
 
     # Iterate through extracted images logic again to find faces.json
-    for url, meta in inventory.items():
+    for i, (url, meta) in enumerate(inventory.items()):
+        if i % 10 == 0:
+            print(f"Scanned {i}/{len(inventory)} documents...", end='\r')
+            
         local_path = meta.get("local_path")
         if not local_path or not local_path.lower().endswith('.pdf'):
             continue
@@ -477,6 +481,39 @@ def ingest_faces(db, inventory, state, force=False):
             # Parent Image Reference
             image_db_id = f"{doc_id}_{img_name}"
             
+            # Determine image dimensions for normalization
+            im_width = 0
+            im_height = 0
+            
+            # Try finding the reference image to get dimensions
+            # 1. full.avif (Preferred for high-res coords)
+            # 2. Original file (if present)
+            # 3. medium.avif
+            
+            dim_source = None
+            if os.path.exists(os.path.join(img_dir, "full.avif")):
+                dim_source = os.path.join(img_dir, "full.avif")
+            else:
+                # Try original extensions in parent dir
+                # (Same logic as detect_faces usually, but check parents)
+                # But here we are in img_dir. The original might be in images_root/img_name.ext
+                # Wait, images_root is the parent of img_dir (img_name folder)
+                # But typically img_name IS the file name without extension.
+                # Let's try finding the file in images_root
+                pass 
+                
+            if not dim_source and os.path.exists(os.path.join(img_dir, "medium.avif")):
+                 dim_source = os.path.join(img_dir, "medium.avif")
+                 
+            if dim_source:
+                try:
+                    with Image.open(dim_source) as im:
+                        im_width, im_height = im.size
+                except Exception as e:
+                    print(f"Error reading dims from {dim_source}: {e}")
+
+            print(f"  Ingesting {len(faces_data)} faces for {img_name}...")
+
             for i, face in enumerate(faces_data):
                 # Face ID: {doc_id}_{img_name}_{i}
                 face_id = f"{image_db_id}_{i}"
@@ -492,11 +529,23 @@ def ingest_faces(db, inventory, state, force=False):
                     # Convert to list of objects: [{'x': 1, 'y': 2}, ...]
                     kps = [{'x': p[0], 'y': p[1]} for p in kps if len(p) >= 2]
                     
+                # Normalize BBox if we have dimensions
+                bbox = face.get("bbox") # [x1, y1, x2, y2]
+                if bbox and len(bbox) == 4 and im_width > 0 and im_height > 0:
+                    # Check if already normalized? (all <= 1.0)
+                    if not (all(c <= 1.0 for c in bbox)):
+                        bbox = [
+                            bbox[0] / im_width,
+                            bbox[1] / im_height,
+                            bbox[2] / im_width,
+                            bbox[3] / im_height
+                        ]
+
                 # Store
                 face_doc = {
                     "parent_image_id": image_db_id,
                     "parent_doc_id": doc_id,
-                    "bbox": face.get("bbox"), # [x1, y1, x2, y2]
+                    "bbox": bbox, # [x1, y1, x2, y2]
                     "det_score": face.get("det_score"),
                     "kps": kps,
                     "embedding": Vector(embedding), # Create Vector object
@@ -513,6 +562,7 @@ def ingest_faces(db, inventory, state, force=False):
                 
                 if batch_count >= 10:
                     batch.commit()
+                    print(f"    Committed batch of 10 faces (Total: {count})")
                     batch = db.batch()
                     batch_count = 0
             
@@ -521,6 +571,7 @@ def ingest_faces(db, inventory, state, force=False):
             
             if batch_count >= 10: # Check again after loop
                  batch.commit()
+                 print(f"    Committed batch of 10 faces (Total: {count})")
                  batch = db.batch()
                  batch_count = 0
                  

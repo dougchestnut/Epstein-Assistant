@@ -85,14 +85,27 @@ export default function FaceOverlay({ imageId, imgRef, faces, hoveredFaceId, onH
 
                 const [x1, y1, x2, y2] = bbox;
 
-                // Calculate position and size in percent or pixels?
-                // Using pixels based on current scale
-                const boxStyle = {
-                    left: x1 * scale.x,
-                    top: y1 * scale.y,
-                    width: (x2 - x1) * scale.x,
-                    height: (y2 - y1) * scale.y,
-                };
+                // Check if bbox is normalized (0.0 - 1.0)
+                // Heuristic: if all coordinates are <= 1.5, assume normalized
+                const isNormalized = x1 <= 2.0 && y1 <= 2.0 && x2 <= 2.0 && y2 <= 2.0;
+
+                let boxStyle;
+                if (isNormalized) {
+                    boxStyle = {
+                        left: x1 * dims.width,
+                        top: y1 * dims.height,
+                        width: (x2 - x1) * dims.width,
+                        height: (y2 - y1) * dims.height,
+                    };
+                } else {
+                    // Legacy: Absolute pixels relative to natural size
+                    boxStyle = {
+                        left: x1 * scale.x,
+                        top: y1 * scale.y,
+                        width: (x2 - x1) * scale.x,
+                        height: (y2 - y1) * scale.y,
+                    };
+                }
 
                 const isHovered = hoveredFaceId === face.id;
 
@@ -101,8 +114,8 @@ export default function FaceOverlay({ imageId, imgRef, faces, hoveredFaceId, onH
                         key={face.id}
                         href={`/faces/${face.id}`}
                         className={`absolute border-2 transition-colors cursor-pointer pointer-events-auto group ${isHovered
-                                ? "border-emerald-300 bg-emerald-400/30 z-20"
-                                : "border-emerald-400/70 hover:border-emerald-400 hover:bg-emerald-400/10 z-10"
+                            ? "border-emerald-300 bg-emerald-400/30 z-20"
+                            : "border-emerald-400/70 hover:border-emerald-400 hover:bg-emerald-400/10 z-10"
                             }`}
                         style={{
                             left: `${boxStyle.left}px`,

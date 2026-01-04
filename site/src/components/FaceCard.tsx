@@ -39,90 +39,80 @@ export default function FaceCard({ face, imageUrl: providedImageUrl, onMouseEnte
         fetchImage();
     }, [face.parent_image_id, providedImageUrl]);
 
-    const handleLoad = () => {
-        const img = imgRef.current;
-        if (!img || !face.bbox) return;
+    const calculateStyle = (img?: HTMLImageElement) => {
+        if (!face.bbox || face.bbox.length !== 4) return;
 
-        const [x1, y1, x2, y2] = face.bbox;
-        const faceW = x2 - x1;
-        const faceH = y2 - y1;
+        let [x1, y1, x2, y2] = face.bbox;
 
-        // We want the face to fill the container (e.g. 150x150)
-        // Let's assume container is roughly square or we just fit 'cover'
-        // Ideally we want to scale the image such that faceW becomes ContainerW
+        let isNormalized = x1 <= 2.0 && y1 <= 2.0 && x2 <= 2.0 && y2 <= 2.0;
 
-        // Since we don't know exact container size in pixels easily without ref, 
-        // let's assume a target size or use a scale factor.
-        // Better: Use styling to center the face.
+        // If not likely normalized, and we have image dimensions, normalize them
+        if (!isNormalized && img) {
+            const nw = img.naturalWidth;
+            const nh = img.naturalHeight;
+            if (nw && nh) {
+                x1 /= nw;
+                x2 /= nw;
+                y1 /= nh;
+                y2 /= nh;
+                isNormalized = true;
+            }
+        }
 
-        // Using a relative container, we can set Top/Left/Width %
-        // BUT, we want to crop.
+        if (!isNormalized) return; // Can't calculate yet
 
-        // Approach:
-        // Scale image so face is 100px wide (arbitrary base).
-        // Translate so face top-left is at 0,0.
+        const w = x2 - x1;
+        const h = y2 - y1;
 
-        // Let's just try to center the face in the view.
-        // Viewport: 100% 100% of parent.
+        if (w <= 0 || h <= 0) return;
 
-        // transform: translate(-x1 px, -y1 px) scale(k)
-        // We need the natural size to know what x1 px is in rendered pixels?
-        // No, x1 is in natural pixels (usually). verify `ingest`. Yes.
+        // Scale: We want the face to be clearly visible.
+        // A scale of 1.0 means the face width equals the container width.
+        // A scale of 1.5 means we show 1.5x the face width (zoomed out context).
+        const scaleFactor = 1.5;
 
-        const naturalW = img.naturalWidth;
-        const naturalH = img.naturalHeight;
+        // Image Width in % relative to container
+        // If face is 0.1 (10%) of image, to make face 100% of container, Image must be 1000%.
+        // To make face 1/1.5 (66%) of container, Image must be 1000%/1.5 = 666%.
+        const widthPercent = (1 / w) * 100 / scaleFactor;
 
-        // Prevent div by zero
-        if (!naturalW || !faceW) return;
+        // Centering:
+        // We want the Center of the Face (cx) to be at the Center of the Container (50%).
+        // cx = x1 + w/2.
+        // We translate the image. 
+        // A translate of -50% moves the image center to the container left edge? No.
+        // translate % is relative to the ELEMENT (the huge image).
+        // If we want a point P (in 0-1 image coords) to be at Container Center (0.5 container):
+        // Position of P in container pixels = P * ImgWidth + TranslatePixel.
+        // We want P * ImgWidth + TranslatePixel = 0.5 * ContainerWidth.
+        // TranslatePixel = 0.5 * ContainerWidth - P * ImgWidth.
+        // Translate% = TranslatePixel / ImgWidth = 0.5 * (ContainerWidth/ImgWidth) - P.
+        // Ratio ContainerWidth/ImgWidth = 1 / (widthPercent/100) = (w * scaleFactor).
+        // Translate% = 0.5 * (w * scaleFactor) - (x1 + w/2).
+        // Translate% = 0.5 * w * scaleFactor - x1 - 0.5 * w.
+        // Translate% = -x1 + 0.5 * w * (scaleFactor - 1).
 
-        // We want the face to be visible. 
-        // Let's create a 'zoom' effect.
-        // We can set the image width to (NaturalW / FaceW) * 100 %.
-        // This makes the face 100% of the container width.
-
-        const scale = 1.5; // Zoom out a bit so it's not JUST the face
-        const wPercent = (naturalW / faceW) * 100 / scale;
-
-        // Position:
-        // We want x1 to be at left edge (or centered).
-        // left = -(x1 / naturalW) * 100 * (naturalW / faceW) ... 
-        // left = -(x1 / faceW) * 100%
-
-        // Center it:
-        // Face Center X = x1 + faceW/2
-        // We want Face Center X to be at 50% of container.
-
-        // Center calculations are tricky with percentages.
-        // Simpler: 
-        // width: `${(naturalW / faceW) * 100}%`
-        // marginLeft: `-${(x1 / faceW) * 100}%`
-        // marginTop: `-${(y1 / faceH) * 100}%` (assuming aspect ratio match)
-
-        // But aspect ratios might not match.
-        // Let's just try to fit width.
-
-        const zoom = naturalW / (faceW * 2); // Show 2x face width area
-
-        // This is getting complicated to be responsive.
-        // Let's use `object-view-box` if supported? Chrome only.
-
-        // Fallback:
-        // absolute positioning.
+        const tx = -x1 + 0.5 * w * (scaleFactor - 1);
+        const ty = -y1 + 0.5 * h * (scaleFactor - 1);
 
         setStyle({
-            width: `${(naturalW / faceW) * 100}%`,
+            width: `${widthPercent}%`,
             maxWidth: 'none',
-            // Position so (x1, y1) is at (0,0)
-            transform: `translate(-${(x1 / naturalW) * 100}%, -${(y1 / naturalH) * 100}%)`,
-            // transform: `translate(-${x1}px, -${y1}px)`, // IF we knew pixels. We don't.
-
-            // Actually, if we set width in %, then translate in % refers to the element's width (which is the big image).
-            // So `translate(-${(x1/naturalW)*100}%)` moves it left by x1 pixels (scaled).
-            // That aligns x1 with the left edge. Correct.
-
+            transform: `translate(${tx * 100}%, ${ty * 100}%)`,
             opacity: 1,
             transition: 'opacity 0.3s'
         });
+    };
+
+    // Try calculating on mount if normalized
+    useEffect(() => {
+        calculateStyle();
+    }, [face.bbox]);
+
+    const handleLoad = () => {
+        if (imgRef.current) {
+            calculateStyle(imgRef.current);
+        }
     };
 
     return (

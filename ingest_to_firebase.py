@@ -528,6 +528,10 @@ def ingest_faces(db, inventory, state, force=False):
                 # Face ID: {doc_id}_{img_name}_{i}
                 face_id = f"{image_db_id}_{i}"
                 
+                if not isinstance(face, dict):
+                    print(f"    Skipping malformed face entry {i} in {img_name}: {face}")
+                    continue
+
                 # Check for embedding
                 embedding = face.get("embedding")
                 if not embedding:

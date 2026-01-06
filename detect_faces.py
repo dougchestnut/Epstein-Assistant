@@ -4,7 +4,10 @@ import logging
 import argparse
 import numpy as np
 import cv2
-from insightface.app import FaceAnalysis
+try:
+    from insightface.app import FaceAnalysis
+except ImportError:
+    FaceAnalysis = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -147,6 +150,11 @@ def main():
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing faces.json files")
     parser.add_argument("--det-size", type=int, default=1280, help="Detection size (square input, default 1280)")
     args = parser.parse_args()
+
+    if FaceAnalysis is None:
+        logging.error("InsightFace is not installed. Face detection cannot proceed.")
+        logging.error("Note: InsightFace (and onnxruntime) likely do not support Python 3.14 yet. Please use Python 3.11 or 3.12.")
+        return
 
     # Initialize InsightFace
     # accessing standard models - usually downloads to ~/.insightface/models/

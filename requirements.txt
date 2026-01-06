@@ -6,5 +6,5 @@ firebase-admin
 python-dotenv
 opencv-python
 numpy
-insightface
-onnxruntime
+# insightface
+# onnxruntime

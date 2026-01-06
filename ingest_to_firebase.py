@@ -469,7 +469,18 @@ def ingest_faces(db, inventory, state, force=False):
             
             try:
                 with open(faces_path, 'r') as f:
-                    faces_data = json.load(f)
+                    faces_json = json.load(f)
+                    
+                # Handle both list (legacy) and dict (new) formats
+                if isinstance(faces_json, list):
+                    faces_data = faces_json
+                    source_dims = None
+                elif isinstance(faces_json, dict):
+                    faces_data = faces_json.get("faces", [])
+                    source_dims = faces_json.get("source_dimensions")
+                else:
+                    faces_data = []
+                    source_dims = None
             except Exception as e:
                 print(f"Error reading {faces_path}: {e}")
                 continue
@@ -486,23 +497,22 @@ def ingest_faces(db, inventory, state, force=False):
             im_height = 0
             
             # Try finding the reference image to get dimensions
-            # 1. full.avif (Preferred for high-res coords)
-            # 2. Original file (if present)
-            # 3. medium.avif
+            # 1. Use source_dimensions from faces.json if available (BEST)
+            # 2. full.avif (Preferred for high-res coords)
+            # 3. Original file (if present)
+            # 4. medium.avif
             
             dim_source = None
-            if os.path.exists(os.path.join(img_dir, "full.avif")):
+            if source_dims:
+                im_width = source_dims.get("width", 0)
+                im_height = source_dims.get("height", 0)
+            elif os.path.exists(os.path.join(img_dir, "full.avif")):
                 dim_source = os.path.join(img_dir, "full.avif")
             else:
                 # Try original extensions in parent dir
-                # (Same logic as detect_faces usually, but check parents)
-                # But here we are in img_dir. The original might be in images_root/img_name.ext
-                # Wait, images_root is the parent of img_dir (img_name folder)
-                # But typically img_name IS the file name without extension.
-                # Let's try finding the file in images_root
                 pass 
                 
-            if not dim_source and os.path.exists(os.path.join(img_dir, "medium.avif")):
+            if not source_dims and not dim_source and os.path.exists(os.path.join(img_dir, "medium.avif")):
                  dim_source = os.path.join(img_dir, "medium.avif")
                  
             if dim_source:

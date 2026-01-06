@@ -139,8 +139,16 @@ def process_image_directory(target_dir, app, overwrite=False):
         
         serialized_faces = [serialize_face(face) for face in faces]
         
+        # Get dimensions (height, width, channels)
+        h, w = img.shape[:2]
+        
+        output_data = {
+            "source_dimensions": {"width": w, "height": h},
+            "faces": serialized_faces
+        }
+        
         with open(faces_path, 'w') as f:
-            json.dump(serialized_faces, f, indent=2)
+            json.dump(output_data, f, indent=2)
             
     except Exception as e:
         logging.error(f"Error processing {image_path}: {e}")
@@ -149,6 +157,7 @@ def main():
     parser = argparse.ArgumentParser(description="Detect faces in images marked as containing faces.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing faces.json files")
     parser.add_argument("--det-size", type=int, default=1280, help="Detection size (square input, default 1280)")
+    parser.add_argument("--doc", help="Process only a specific document ID (or comma-separated list).")
     args = parser.parse_args()
 
     if FaceAnalysis is None:
@@ -190,6 +199,18 @@ def main():
     
     count = 0
     for url, meta in inventory.items():
+        doc_id = meta.get("id")
+        
+        # Filter by doc ID if provided
+        if args.doc:
+            target_docs = [x.strip() for x in args.doc.split(',')]
+            # Check if doc_id matches or if it's a file stem match
+            local_p = meta.get("local_path")
+            stem = os.path.splitext(os.path.basename(local_p))[0] if local_p else ""
+            
+            if (not doc_id or str(doc_id) not in target_docs) and (not stem or stem not in target_docs):
+                continue
+
         extraction_dir = meta.get("extraction_dir")
         if not extraction_dir or not os.path.exists(extraction_dir):
             local_path = meta.get("local_path")

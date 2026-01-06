@@ -154,6 +154,11 @@ def process_image_directory(target_dir, app, overwrite=False):
         logging.error(f"Error processing {image_path}: {e}")
 
 def main():
+    import warnings
+    # Suppress specific FutureWarnings from insightface dependencies
+    warnings.filterwarnings("ignore", category=FutureWarning, module="insightface")
+    warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn") # Sometimes appears
+    
     parser = argparse.ArgumentParser(description="Detect faces in images marked as containing faces.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing faces.json files")
     parser.add_argument("--det-size", type=int, default=1280, help="Detection size (square input, default 1280)")

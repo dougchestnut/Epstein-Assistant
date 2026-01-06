@@ -16,14 +16,30 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
 ### Usage
 
 1.  **Install Dependencies**
-    ```bash
-    pip install playwright playwright-stealth pymupdf
-    playwright install chromium
+
+    **IMPORTANT**: Python 3.14 is currently incompatible with `insightface` and `onnxruntime`. You **MUST** use **Python 3.11**.
+
+    **Windows Setup:**
+    1.  Install Python 3.11: `winget install -e --id Python.Python.3.11`
+    2.  Create a virtual environment (recommended name `env311` for compatibility):
+        ```powershell
+        py -3.11 -m venv env311
+        ```
+    3.  Install libraries into the environment:
+        ```powershell
+        .\env311\Scripts\pip install -r requirements.txt
+        ```
+        *Note: If you run into `pip` errors, ensure `numpy<2.0.0` is installed.*
+
+    **Running Scripts:**
+    Always run python using the environment's executable:
+    ```powershell
+    .\env311\Scripts\python script_name.py [args]
     ```
 
 2.  **Run Scraper**
     ```bash
-    python scrape_epstein.py
+    .\env311\Scripts\python scrape_epstein.py
     ```
 
     The script will:
@@ -125,7 +141,9 @@ The project includes a robust scraping script `scrape_epstein.py` designed to fe
         *   Saves results to `faces.json` in the image's directory.
         *   Ignores `has_faces` flag from analysis (processes everything) for maximum coverage.
     *   **Requirements:**
+        *   **Python 3.11** (Strict requirement).
         *   `insightface` and `onnxruntime` installed (included in requirements.txt).
+        *   `numpy<2.0.0` (Critical for insightface).
 
 12. **Ingest to Firebase**
     ```bash

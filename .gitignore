@@ -9,3 +9,8 @@ node_modules
 .insightface/models/buffalo_l/det_10g.onnx
 .insightface/models/buffalo_l/genderage.onnx
 .insightface/models/buffalo_l/w600k_r50.onnx
+
+.venv
+.venv_bad
+env311
+__pycache__

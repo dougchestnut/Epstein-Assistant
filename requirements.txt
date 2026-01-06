@@ -5,6 +5,6 @@ pillow-heif
 firebase-admin
 python-dotenv
 opencv-python
-numpy
-# insightface
-# onnxruntime
+numpy<2.0.0
+insightface
+onnxruntime
